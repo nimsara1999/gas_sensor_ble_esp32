@@ -36,12 +36,11 @@ std::string format_hex_string(const std::string& hexString)
 
 class AdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) {
-    if (strcmp(advertisedDevice.getName().c_str(), "esp32") == 0) {
+    if (strcmp(advertisedDevice.getName().c_str(), "") == 0) {
       std::string hexAdvData = string_to_hex(advertisedDevice.getManufacturerData());
       if (hexAdvData.rfind("544e", 0) == 0) { // Check if hexAdvData starts with "544e"
         std::string formattedHexAdvData = format_hex_string(hexAdvData); // Format the hex string
-        Serial.print(advertisedDevice.getName().c_str());
-        Serial.printf(": %s \n", formattedHexAdvData.c_str());
+        Serial.printf("%s \n", formattedHexAdvData.c_str());
       }
     }
   }
