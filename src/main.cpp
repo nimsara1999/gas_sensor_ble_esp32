@@ -9,6 +9,7 @@ BLEScan* pBLEScan;
 const int scanTimeSeconds = 1;
 
 std::string string_to_hex(const std::string& input)
+// Convert the string to a hex string
 {
     static const char hex_digits[] = "0123456789abcdef";
 
@@ -23,19 +24,21 @@ std::string string_to_hex(const std::string& input)
 }
 
 std::string format_hex_string(const std::string& hexString)
+// Format the hex string with spaces
 {
     std::string formattedString;
     for (size_t i = 0; i < hexString.length(); i += 2)
     {
         formattedString += hexString.substr(i, 2);
         if (i + 2 < hexString.length()) {
-            formattedString += " "; // Add a space after every two characters
+            formattedString += " "; 
         }
     }
     return formattedString;
 }
 
 int hex_to_int(const std::string& hexString)
+// Convert the hex string to an integer
 {
     return strtol(hexString.c_str(), nullptr, 16);
 }
@@ -45,14 +48,14 @@ class AdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) {
     if (strcmp(advertisedDevice.getName().c_str(), "") == 0) {
       std::string hexAdvData = string_to_hex(advertisedDevice.getManufacturerData());
-      if (hexAdvData.rfind("544e", 0) == 0) { // Check if hexAdvData starts with "544e"
-        // Extract variables from the split hex string
-        std::string frameHead1 = hexAdvData.substr(0, 4); // "544e"
-        std::string type = hexAdvData.substr(4, 2);       // Next 2 characters
-        std::string cmd = hexAdvData.substr(6, 2);        // Next 2 characters
-        std::string frameHead2 = hexAdvData.substr(8, 4); // Next 4 characters (another frame head)
-        std::string measurementHex = hexAdvData.substr(12, 4); // Next 4 characters
-        std::string batteryHex = hexAdvData.substr(16, 2);   // Next 2 characters
+      if (hexAdvData.rfind("544e", 0) == 0) { 
+
+        std::string frameHead1 = hexAdvData.substr(0, 4); 
+        std::string type = hexAdvData.substr(4, 2);       
+        std::string cmd = hexAdvData.substr(6, 2);        
+        std::string frameHead2 = hexAdvData.substr(8, 4); 
+        std::string measurementHex = hexAdvData.substr(12, 4); 
+        std::string batteryHex = hexAdvData.substr(16, 2);   
 
         int measurement = hex_to_int(measurementHex);
         int battery = hex_to_int(batteryHex);
