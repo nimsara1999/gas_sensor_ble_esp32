@@ -34,13 +34,35 @@ std::string format_hex_string(const std::string& hexString)
     return formattedString;
 }
 
+int hex_to_int(const std::string& hexString)
+{
+    return strtol(hexString.c_str(), nullptr, 16);
+}
+
+
 class AdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) {
     if (strcmp(advertisedDevice.getName().c_str(), "") == 0) {
       std::string hexAdvData = string_to_hex(advertisedDevice.getManufacturerData());
       if (hexAdvData.rfind("544e", 0) == 0) { // Check if hexAdvData starts with "544e"
-        std::string formattedHexAdvData = format_hex_string(hexAdvData); // Format the hex string
-        Serial.printf("%s \n", formattedHexAdvData.c_str());
+        // Extract variables from the split hex string
+        std::string frameHead1 = hexAdvData.substr(0, 4); // "544e"
+        std::string type = hexAdvData.substr(4, 2);       // Next 2 characters
+        std::string cmd = hexAdvData.substr(6, 2);        // Next 2 characters
+        std::string frameHead2 = hexAdvData.substr(8, 4); // Next 4 characters (another frame head)
+        std::string measurementHex = hexAdvData.substr(12, 4); // Next 4 characters
+        std::string batteryHex = hexAdvData.substr(16, 2);   // Next 2 characters
+
+        int measurement = hex_to_int(measurementHex);
+        int battery = hex_to_int(batteryHex);
+
+        // Print the extracted values
+        Serial.printf("****************************************\n");
+        Serial.printf("Frame Head: %s\n", frameHead1.c_str());
+        Serial.printf("Type: %s\n", type.c_str());
+        Serial.printf("Cmd: %s\n", cmd.c_str());
+        Serial.printf("Measurement Result (US): %d\n", measurement);
+        Serial.printf("Battery: %d % \n\n\n", battery);
       }
     }
   }
