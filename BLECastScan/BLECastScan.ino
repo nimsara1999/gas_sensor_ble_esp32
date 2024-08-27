@@ -21,13 +21,26 @@ std::string string_to_hex(const std::string& input)
     return output;
 }
 
+std::string format_hex_string(const std::string& hexString)
+{
+    std::string formattedString;
+    for (size_t i = 0; i < hexString.length(); i += 2)
+    {
+        formattedString += hexString.substr(i, 2);
+        if (i + 2 < hexString.length()) {
+            formattedString += " "; // Add a space after every two characters
+        }
+    }
+    return formattedString;
+}
+
 class AdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) {
-    Serial.print(advertisedDevice.getName().c_str());
-    if (strcmp(advertisedDevice.getName().c_str(), "") == 0) {
+    if (strcmp(advertisedDevice.getName().c_str(), "esp32") == 0) {
       Serial.print(advertisedDevice.getName().c_str());
       std::string hexAdvData = string_to_hex(advertisedDevice.getManufacturerData());
-      Serial.printf(": %s \n", hexAdvData.c_str());
+      std::string formattedHexAdvData = format_hex_string(hexAdvData); // Format the hex string
+      Serial.printf(": %s \n", formattedHexAdvData.c_str());
     }
   }
 };
