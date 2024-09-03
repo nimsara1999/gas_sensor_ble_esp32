@@ -1,91 +1,93 @@
-#include <Arduino.h>
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEScan.h>
-#include <BLEAdvertisedDevice.h>
+#include <WiFi.h>
+#include <WebServer.h>
+#include <ArduinoJson.h>
 
-BLEScan* pBLEScan;
+const char *ap_ssid = "ESP32-AP";
+const char *ap_password = "123456789";
 
-const int scanTimeSeconds = 1;
+WebServer server(80);
 
-std::string string_to_hex(const std::string& input)
-// Convert the string to a hex string
+void handleSend()
 {
-    static const char hex_digits[] = "0123456789abcdef";
+  if (server.method() == HTTP_POST)
+  {
+    JsonDocument doc; // Allocate a fixed size for the JSON document
 
-    std::string output;
-    output.reserve(input.length() * 2);
-    for (unsigned char c : input)
+    String requestBody = server.arg("plain");
+    DeserializationError error = deserializeJson(doc, requestBody);
+
+    if (error)
     {
-        output.push_back(hex_digits[c >> 4]);
-        output.push_back(hex_digits[c & 15]);
+      Serial.print("JSON parse error: ");
+      Serial.println(error.c_str());
+      server.send(400, "text/plain", "Invalid JSON");
+      return;
     }
-    return output;
-}
 
-std::string format_hex_string(const std::string& hexString)
-// Format the hex string with spaces
-{
-    std::string formattedString;
-    for (size_t i = 0; i < hexString.length(); i += 2)
+    String ssid = doc["ssid"].as<String>();
+    String password = doc["password"].as<String>();
+
+    Serial.print("Received SSID: ");
+    Serial.println(ssid);
+    Serial.print("Received Password: ");
+    Serial.println(password);
+
+    WiFi.mode(WIFI_AP_STA); // Set mode to both AP and STA
+    WiFi.begin(ssid.c_str(), password.c_str());
+
+    int maxRetries = 20;
+    int retries = 0;
+
+    while (WiFi.status() != WL_CONNECTED && retries < maxRetries)
     {
-        formattedString += hexString.substr(i, 2);
-        if (i + 2 < hexString.length()) {
-            formattedString += " "; 
-        }
+      delay(500);
+      Serial.print(".");
+      retries++;
     }
-    return formattedString;
-}
 
-int hex_to_int(const std::string& hexString)
-// Convert the hex string to an integer
-{
-    return strtol(hexString.c_str(), nullptr, 16);
-}
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      Serial.println("\nSuccessfully connected to Wi-Fi");
+      server.send(200, "text/plain", "Successfully connected");
 
+      delay(1000);
 
-class AdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
-  void onResult(BLEAdvertisedDevice advertisedDevice) {
-    if (strcmp(advertisedDevice.getName().c_str(), "") == 0) {
-      std::string hexAdvData = string_to_hex(advertisedDevice.getManufacturerData());
-      if (hexAdvData.rfind("544e", 0) == 0) { 
-
-        std::string frameHead1 = hexAdvData.substr(0, 4); 
-        std::string type = hexAdvData.substr(4, 2);       
-        std::string cmd = hexAdvData.substr(6, 2);        
-        std::string frameHead2 = hexAdvData.substr(8, 4); 
-        std::string measurementHex = hexAdvData.substr(12, 4); 
-        std::string batteryHex = hexAdvData.substr(16, 2);   
-
-        int measurement = hex_to_int(measurementHex);
-        int battery = hex_to_int(batteryHex);
-
-        // Print the extracted values
-        Serial.printf("****************************************\n");
-        Serial.printf("Frame Head: %s\n", frameHead1.c_str());
-        Serial.printf("Type: %s\n", type.c_str());
-        Serial.printf("Cmd: %s\n", cmd.c_str());
-        Serial.printf("Measurement Result (US): %d\n", measurement);
-        Serial.printf("Battery: %d % \n\n\n", battery);
-      }
+      WiFi.softAPdisconnect(true); // Disable the AP mode after response
+      Serial.print("IP Address: ");
+      Serial.println(WiFi.localIP());
+    }
+    else
+    {
+      Serial.println("\nFailed to connect to Wi-Fi");
+      server.send(200, "text/plain", "SSID or PASSWORD wrong!");
+      WiFi.mode(WIFI_AP); // Return to AP mode if connection fails
+      WiFi.softAP(ap_ssid, ap_password);
+      Serial.println("Re-enabled AP mode");
     }
   }
-};
-
-
-void setup() {
-  Serial.begin(115200);
-  Serial.println("Scanning...");
-
-  BLEDevice::init("");
-  pBLEScan = BLEDevice::getScan(); // create new scan
-  pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
-  pBLEScan->setActiveScan(false); // active scan (true) uses more power, but get results faster
-  pBLEScan->setInterval(100);
-  pBLEScan->setWindow(99);
+  else
+  {
+    server.send(405, "text/plain", "Method Not Allowed");
+  }
 }
 
-void loop() {
-  BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
-  pBLEScan->clearResults();
+void setup()
+{
+  Serial.begin(115200);
+
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ap_ssid, ap_password);
+  Serial.println("Access Point Started");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.softAPIP());
+
+  server.on("/send", HTTP_POST, handleSend);
+
+  server.begin();
+  Serial.println("HTTP server started");
+}
+
+void loop()
+{
+  server.handleClient();
 }
