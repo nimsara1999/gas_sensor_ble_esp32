@@ -2,6 +2,7 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
+#include <HTTPClient.h>
 
 const char *ap_ssid = "ESP32-AP";
 const char *ap_password = "123456789";
@@ -80,6 +81,37 @@ bool tryConnectToSavedWiFi()
   return false;
 }
 
+void check_internet_connection()
+{
+  if (server.method() == HTTP_GET)
+  {
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      HTTPClient http;
+      http.begin("http://www.google.com");
+      int httpCode = http.GET();
+
+      if (httpCode > 0)
+      {
+        Serial.println("Connected to the Internet");
+        http.end();
+        server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
+      }
+      else
+      {
+        Serial.println("No Internet access");
+        server.send(200, "application/json", "{\"internet_connected\": 0, \"wifi_connected\": 1}");
+      }
+      http.end();
+    }
+    else
+    {
+      Serial.println("Not connected to Wi-Fi");
+      server.send(200, "application/json", "{\"internet_connected\": 0, \"wifi_connected\": 0}");
+    }
+  }
+}
+
 void handleSend()
 {
   if (server.method() == HTTP_POST)
@@ -121,7 +153,7 @@ void handleSend()
     if (WiFi.status() == WL_CONNECTED)
     {
       Serial.println("\nSuccessfully connected to Wi-Fi");
-      server.send(200, "text/plain", "200");
+      server.send(200, "application/json", "{\"status\": 1, \"ssid\": " + ssid + "}");
 
       delay(1000);
 
@@ -135,7 +167,7 @@ void handleSend()
     else
     {
       Serial.println("\nFailed to connect to Wi-Fi");
-      server.send(406, "text/plain", "406");
+      server.send(200, "application/json", "{\"status\": 0, \"ssid\": " + ssid + "}");
       WiFi.mode(WIFI_AP); // Return to AP mode if connection fails
       WiFi.softAP(ap_ssid, ap_password);
       Serial.println("Re-enabled AP mode");
@@ -165,7 +197,8 @@ void setup()
     Serial.println(WiFi.softAPIP());
   }
 
-  server.on("/send", HTTP_POST, handleSend);
+  server.on("/connect-to-new-wifi", HTTP_POST, handleSend);
+  server.on("/check-internet", HTTP_GET, check_internet_connection);
 
   server.begin();
   Serial.println("HTTP server started");
