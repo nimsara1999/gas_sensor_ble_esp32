@@ -1,11 +1,84 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
+#include <EEPROM.h>
 
 const char *ap_ssid = "ESP32-AP";
 const char *ap_password = "123456789";
 
 WebServer server(80);
+
+const int SSID_ADDR = 0;
+const int PASS_ADDR = 50;
+const int EEPROM_SIZE = 512;
+
+void saveWiFiCredentials(const String &ssid, const String &password)
+{
+  EEPROM.begin(EEPROM_SIZE);
+
+  for (int i = SSID_ADDR; i < SSID_ADDR + 50; i++)
+    EEPROM.write(i, 0);
+  for (int i = PASS_ADDR; i < PASS_ADDR + 50; i++)
+    EEPROM.write(i, 0);
+
+  for (int i = 0; i < ssid.length(); i++)
+    EEPROM.write(SSID_ADDR + i, ssid[i]);
+  for (int i = 0; i < password.length(); i++)
+    EEPROM.write(PASS_ADDR + i, password[i]);
+  Serial.println("Saved Wi-Fi credentials to EEPROM");
+
+  EEPROM.commit();
+}
+
+void loadWiFiCredentials(String &ssid, String &password)
+{
+  EEPROM.begin(EEPROM_SIZE);
+
+  char ssidBuff[50];
+  char passBuff[50];
+
+  for (int i = 0; i < 50; i++)
+    ssidBuff[i] = EEPROM.read(SSID_ADDR + i);
+  for (int i = 0; i < 50; i++)
+    passBuff[i] = EEPROM.read(PASS_ADDR + i);
+
+  ssid = String(ssidBuff);
+  password = String(passBuff);
+  Serial.println("Loaded Wi-Fi credentials from EEPROM");
+}
+
+bool tryConnectToSavedWiFi()
+{
+  String savedSSID, savedPassword;
+  loadWiFiCredentials(savedSSID, savedPassword);
+
+  if (savedSSID.length() > 0 && savedPassword.length() > 0)
+  {
+    Serial.print("Trying to connect to saved SSID: ");
+    Serial.println(savedSSID);
+
+    WiFi.begin(savedSSID.c_str(), savedPassword.c_str());
+
+    int maxRetries = 10;
+    int retries = 0;
+
+    while (WiFi.status() != WL_CONNECTED && retries < maxRetries)
+    {
+      delay(1000);
+      Serial.print(".");
+      retries++;
+    }
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      Serial.println("\nSuccessfully connected to saved Wi-Fi");
+      Serial.print("IP Address: ");
+      Serial.println(WiFi.localIP());
+      return true;
+    }
+  }
+  return false;
+}
 
 void handleSend()
 {
@@ -48,18 +121,21 @@ void handleSend()
     if (WiFi.status() == WL_CONNECTED)
     {
       Serial.println("\nSuccessfully connected to Wi-Fi");
-      server.send(200, "text/plain", "Successfully connected");
+      server.send(200, "text/plain", "200");
 
       delay(1000);
 
-      WiFi.softAPdisconnect(true); // Disable the AP mode after response
-      Serial.print("IP Address: ");
+      // WiFi.softAPdisconnect(true); // Disable the AP mode after response
+      saveWiFiCredentials(ssid, password);
+      Serial.print("Wi-Fi client IP Address: ");
       Serial.println(WiFi.localIP());
+      Serial.print("Wi-Fi server (AP) IP Address: ");
+      Serial.println(WiFi.softAPIP());
     }
     else
     {
       Serial.println("\nFailed to connect to Wi-Fi");
-      server.send(200, "text/plain", "SSID or PASSWORD wrong!");
+      server.send(406, "text/plain", "406");
       WiFi.mode(WIFI_AP); // Return to AP mode if connection fails
       WiFi.softAP(ap_ssid, ap_password);
       Serial.println("Re-enabled AP mode");
@@ -75,11 +151,19 @@ void setup()
 {
   Serial.begin(115200);
 
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(ap_ssid, ap_password);
-  Serial.println("Access Point Started");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.softAPIP());
+  EEPROM.begin(EEPROM_SIZE);
+
+  // Try to connect to saved Wi-Fi credentials
+  if (!tryConnectToSavedWiFi())
+  {
+    // If failed, start in AP mode
+    Serial.println("Starting AP mode");
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(ap_ssid, ap_password);
+    Serial.println("Access Point Started");
+    Serial.print("AP IP Address: ");
+    Serial.println(WiFi.softAPIP());
+  }
 
   server.on("/send", HTTP_POST, handleSend);
 
