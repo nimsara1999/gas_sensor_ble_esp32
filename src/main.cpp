@@ -8,7 +8,7 @@
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
 
-const char *ap_ssid = "ESP32-AP";
+const char *ap_ssid = "Gateway";
 const char *ap_password = "123456789";
 const int scanTimeSeconds = 1;
 
@@ -275,7 +275,7 @@ void handle_connect_to_new_wifi()
     if (WiFi.status() == WL_CONNECTED)
     {
       Serial.println("\nSuccessfully connected to Wi-Fi");
-      server.send(200, "application/json", "{\"status\": 1, \"ssid\": " + ssid + "}");
+      server.send(200, "application/json", "{\"status\": 1, \"ssid\": \"" + ssid + "\"}");
 
       delay(1000);
 
@@ -291,7 +291,7 @@ void handle_connect_to_new_wifi()
     else
     {
       Serial.println("\nFailed to connect to Wi-Fi");
-      server.send(200, "application/json", "{\"status\": 0, \"ssid\": " + ssid + "}");
+      server.send(200, "application/json", "{\"status\": 0, \"ssid\": \"" + ssid + "\"}");
       WiFi.mode(WIFI_AP); // Return to AP mode if connection fails
       WiFi.softAP(ap_ssid, ap_password);
       Serial.println("Re-enabled AP mode");
