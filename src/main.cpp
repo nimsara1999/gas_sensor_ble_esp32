@@ -77,14 +77,14 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         int battery = hex_to_int(batteryHex);
 
         Serial.printf("*********************\n");
-        Serial.printf("Received Data: %s\n", format_hex_string(hexAdvData).c_str());
-        Serial.printf("Frame Head: %s\n", frameHead1.c_str());
-        Serial.printf("Type: %s\n", type.c_str());
-        Serial.printf("Cmd: %s\n", cmd.c_str());
-        Serial.printf("Measurement Result (US): %d\n", measurement);
-        Serial.printf("Battery: %d % \n", battery);
-        Serial.printf("RSSI: %d\n", advertisedDevice.getRSSI());
-        Serial.printf("Prepared packet: \n");
+        // Serial.printf("Received Data: %s\n", format_hex_string(hexAdvData).c_str());
+        // Serial.printf("Frame Head: %s\n", frameHead1.c_str());
+        // Serial.printf("Type: %s\n", type.c_str());
+        // Serial.printf("Cmd: %s\n", cmd.c_str());
+        // Serial.printf("Measurement Result (US): %d\n", measurement);
+        // Serial.printf("Battery: %d % \n", battery);
+        // Serial.printf("RSSI: %d\n", advertisedDevice.getRSSI());
+        // Serial.printf("Prepared packet: \n");
         Serial.printf("{\"DATETIME\":1724343139511,\"IMEI\":\"A4C138CCD9ED\",\"NCU_FW_VER\":109,\"GAS_METER\":%d,\"CSQ\":104,\"MCU_TEMP\":30,\"BAT_VOL\":%d,\"METER_TYPE\":4,\"TIME_ZONE\":\"+07\",\"TANK_SIZE\":\"20lb\",\"GAS_PERCENT\":0}\n\n", measurement, battery);
       }
     }
@@ -347,6 +347,6 @@ void loop()
   handleButtonPress();
   blinkLEDInAPMode();
 
-  BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
-  pBLEScan->clearResults();
+  // BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
+  // pBLEScan->clearResults();
 }
