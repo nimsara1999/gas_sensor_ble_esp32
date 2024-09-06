@@ -12,11 +12,13 @@ const char *ap_ssid = "Gateway";
 const char *ap_password = "123456789";
 const int scanTimeSeconds = 1;
 
-const int BOOT_PIN = 0;
-const int LED_PIN = 2;
+const int BOOT_PIN = 9;
 bool inAPMode = false;
+bool bluetooth_sending_status = false;
 unsigned long previousMillis = 0;
 const long interval = 500;
+
+const char *serverUrl = "http://192.168.1.3:8080";
 
 BLEScan *pBLEScan;
 WebServer server(80);
@@ -24,6 +26,10 @@ WebServer server(80);
 const int SSID_ADDR = 0;
 const int PASS_ADDR = 50;
 const int EEPROM_SIZE = 512;
+
+int led_state = 0;
+
+void indicateSuccessfulConnection();
 
 std::string string_to_hex(const std::string &input)
 {
@@ -76,6 +82,9 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         int measurement = hex_to_int(measurementHex);
         int battery = hex_to_int(batteryHex);
 
+        char postData[256]; // Define a buffer for the data
+        snprintf(postData, sizeof(postData), "{\"DATETIME\":1724343139511,\"IMEI\":\"A4C138CCD9ED\",\"NCU_FW_VER\":109,\"GAS_METER\":%d,\"CSQ\":104,\"MCU_TEMP\":30,\"BAT_VOL\":%d,\"METER_TYPE\":4,\"TIME_ZONE\":\"+07\",\"TANK_SIZE\":\"20lb\",\"GAS_PERCENT\":0}", measurement, battery);
+
         Serial.printf("*********************\n");
         // Serial.printf("Received Data: %s\n", format_hex_string(hexAdvData).c_str());
         // Serial.printf("Frame Head: %s\n", frameHead1.c_str());
@@ -86,6 +95,29 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         // Serial.printf("RSSI: %d\n", advertisedDevice.getRSSI());
         // Serial.printf("Prepared packet: \n");
         Serial.printf("{\"DATETIME\":1724343139511,\"IMEI\":\"A4C138CCD9ED\",\"NCU_FW_VER\":109,\"GAS_METER\":%d,\"CSQ\":104,\"MCU_TEMP\":30,\"BAT_VOL\":%d,\"METER_TYPE\":4,\"TIME_ZONE\":\"+07\",\"TANK_SIZE\":\"20lb\",\"GAS_PERCENT\":0}\n\n", measurement, battery);
+
+        if (WiFi.status() == WL_CONNECTED)
+        {
+          HTTPClient http;
+          http.begin(serverUrl);
+          http.addHeader("Content-Type", "application/json");
+          int httpResponseCode = http.POST(postData);
+          // Check response code
+          if (httpResponseCode > 0)
+          {
+            String response = http.getString(); // Get the response to the request
+            Serial.println(httpResponseCode);   // Print response code
+            Serial.println(response);           // Print response payload
+          }
+          else
+          {
+            Serial.printf("Error on sending POST: %s\n", http.errorToString(httpResponseCode).c_str());
+          }
+        }
+        else
+        {
+          Serial.println("Could not send data to server. Not connected to Wi-Fi");
+        }
       }
     }
   }
@@ -94,7 +126,9 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 void switchToAPMode()
 {
   Serial.println("Switching to AP mode...");
+  bluetooth_sending_status = false;
   WiFi.mode(WIFI_AP);
+  inAPMode = true;
   WiFi.softAP(ap_ssid, ap_password);
   Serial.println("Access Point Started");
   Serial.print("AP IP Address: ");
@@ -109,15 +143,15 @@ void blinkLEDInAPMode()
     if (currentMillis - previousMillis >= interval)
     {
       previousMillis = currentMillis;
-      int state = digitalRead(LED_PIN);
-      digitalWrite(LED_PIN, !state);
+      led_state = !led_state;
+      digitalWrite(BUILTIN_LED, led_state);
     }
   }
 }
 
 void handleButtonPress()
 {
-  if (digitalRead(BOOT_PIN) == LOW)
+  if (digitalRead(BOOT_PIN) == LOW && inAPMode == false)
   {
     delay(100);
     if (digitalRead(BOOT_PIN) == LOW)
@@ -189,6 +223,8 @@ bool tryConnectToSavedWiFi()
       Serial.println("\nSuccessfully connected to saved Wi-Fi");
       Serial.print("IP Address: ");
       Serial.println(WiFi.localIP());
+      bluetooth_sending_status = true;
+      indicateSuccessfulConnection();
       return true;
     }
   }
@@ -210,6 +246,9 @@ void handle_check_internet_connection()
         Serial.println("Connected to the Internet");
         http.end();
         server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
+        WiFi.mode(WIFI_STA);
+        bluetooth_sending_status = true;
+        inAPMode = false;
       }
       else
       {
@@ -228,10 +267,10 @@ void handle_check_internet_connection()
 
 void indicateSuccessfulConnection()
 {
-  digitalWrite(LED_PIN, HIGH); // Turn the LED on
-  delay(3000);                 // Keep the LED on for 3 seconds
-  digitalWrite(LED_PIN, LOW);  // Turn the LED off
-  inAPMode = false;            // Exit AP mode, stop blinking
+  digitalWrite(BUILTIN_LED, HIGH); // Turn the LED on
+  delay(3000);                     // Keep the LED on for 3 seconds
+  digitalWrite(BUILTIN_LED, LOW);  // Turn the LED off
+  inAPMode = false;                // Exit AP mode, stop blinking
 }
 
 void handle_connect_to_new_wifi()
@@ -279,7 +318,6 @@ void handle_connect_to_new_wifi()
 
       delay(1000);
 
-      // WiFi.softAPdisconnect(true); // Disable the AP mode after response
       saveWiFiCredentials(ssid, password);
       Serial.print("Wi-Fi client IP Address: ");
       Serial.println(WiFi.localIP());
@@ -293,6 +331,7 @@ void handle_connect_to_new_wifi()
       Serial.println("\nFailed to connect to Wi-Fi");
       server.send(200, "application/json", "{\"status\": 0, \"ssid\": \"" + ssid + "\"}");
       WiFi.mode(WIFI_AP); // Return to AP mode if connection fails
+      inAPMode = true;
       WiFi.softAP(ap_ssid, ap_password);
       Serial.println("Re-enabled AP mode");
     }
@@ -310,8 +349,11 @@ void setup()
   EEPROM.begin(EEPROM_SIZE);
 
   pinMode(BOOT_PIN, INPUT_PULLUP);
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  pinMode(BUILTIN_LED, OUTPUT);
+  digitalWrite(BUILTIN_LED, LOW);
+
+  server.on("/connect-to-new-wifi", HTTP_POST, handle_connect_to_new_wifi);
+  server.on("/check-internet", HTTP_GET, handle_check_internet_connection);
 
   // Try to connect to saved Wi-Fi credentials
   if (!tryConnectToSavedWiFi())
@@ -319,11 +361,16 @@ void setup()
     // If failed, start in AP mode
     Serial.println("Starting AP mode");
     WiFi.mode(WIFI_AP);
+    inAPMode = true;
     WiFi.softAP(ap_ssid, ap_password);
     Serial.println("Access Point Started");
     Serial.print("AP IP Address: ");
+    bluetooth_sending_status = false;
     Serial.println(WiFi.softAPIP());
   }
+
+  server.begin();
+  Serial.println("HTTP server started");
   Serial.println("Scanning for Gas sensors...");
 
   BLEDevice::init("");
@@ -332,12 +379,6 @@ void setup()
   pBLEScan->setActiveScan(false);
   pBLEScan->setInterval(100);
   pBLEScan->setWindow(99);
-
-  server.on("/connect-to-new-wifi", HTTP_POST, handle_connect_to_new_wifi);
-  server.on("/check-internet", HTTP_GET, handle_check_internet_connection);
-
-  server.begin();
-  Serial.println("HTTP server started");
 }
 
 void loop()
@@ -347,6 +388,9 @@ void loop()
   handleButtonPress();
   blinkLEDInAPMode();
 
-  // BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
-  // pBLEScan->clearResults();
+  if (bluetooth_sending_status)
+  {
+    BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
+    pBLEScan->clearResults();
+  }
 }
