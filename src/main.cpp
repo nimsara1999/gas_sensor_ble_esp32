@@ -7,6 +7,10 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+// #include <WiFiClientSecure.h>
+// #include <ArduinoHttpClient.h>
 
 const char *ap_ssid = "Gateway";
 const char *ap_password = "123456789";
@@ -18,18 +22,51 @@ bool bluetooth_sending_status = false;
 unsigned long previousMillis = 0;
 const long interval = 500;
 
-const char *serverUrl = "http://192.168.1.3:8080";
+// const char *serverUrl = "https://mockapi.io/projects/66e0c26e2fb67ac16f2a8398#";
+const char *serverUrl = "jsonplaceholder.typicode.com";
+// const char *serverUrl = "https://elysiumapi.overleap.lk/api/v1/gas/stream";
+const int serverPort = 443; // Standard HTTPS port
 
 BLEScan *pBLEScan;
 WebServer server(80);
+
+// WiFiClientSecure wifiClient;
+
+const char *rootCACertificate =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIDpzCCA06gAwIBAgIQdejYjznIYgETZBgOsch3VjAKBggqhkjOPQQDAjA7MQsw\n"
+    "CQYDVQQGEwJVUzEeMBwGA1UEChMVR29vZ2xlIFRydXN0IFNlcnZpY2VzMQwwCgYD\n"
+    "VQQDEwNXRTEwHhcNMjQwODIwMDcyOTAyWhcNMjQxMTE4MDcyOTAxWjAXMRUwEwYD\n"
+    "VQQDEwx0eXBpY29kZS5jb20wWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARsuzL/\n"
+    "o7KTI+BvU0j6DSz8qHQxR/E4yH1OjVsz25iWduFMajk1oOooN+DOwSIyk5WyLao/\n"
+    "TMSFcsQ/3KFbkcZDo4ICVjCCAlIwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoG\n"
+    "CCsGAQUFBwMBMAwGA1UdEwEB/wQCMAAwHQYDVR0OBBYEFPZMW366VYShU4L4QUQy\n"
+    "bFL2Cky3MB8GA1UdIwQYMBaAFJB3kjVnxP+ozKnme9mAeXvMk/k4MF4GCCsGAQUF\n"
+    "BwEBBFIwUDAnBggrBgEFBQcwAYYbaHR0cDovL28ucGtpLmdvb2cvcy93ZTEvZGVn\n"
+    "MCUGCCsGAQUFBzAChhlodHRwOi8vaS5wa2kuZ29vZy93ZTEuY3J0MCcGA1UdEQQg\n"
+    "MB6CDHR5cGljb2RlLmNvbYIOKi50eXBpY29kZS5jb20wEwYDVR0gBAwwCjAIBgZn\n"
+    "gQwBAgEwNgYDVR0fBC8wLTAroCmgJ4YlaHR0cDovL2MucGtpLmdvb2cvd2UxL1h3\n"
+    "N2s5OTVCdlZnLmNybDCCAQUGCisGAQQB1nkCBAIEgfYEgfMA8QB2AO7N0GTV2xrO\n"
+    "xVy3nbTNE6Iyh0Z8vOzew1FIWUZxH7WbAAABkW7nYEAAAAQDAEcwRQIgatvQ+qUI\n"
+    "OeFGZKsu/Bxbm3cVeD6NcGcAetfETDKIVqoCIQCP9B8ifu3fMTNpsPnOofNZdAh1\n"
+    "ra1yFGUlaRjV/btE8AB3AEiw42vapkc0D+VqAvqdMOscUgHLVt0sgdm7v6s52IRz\n"
+    "AAABkW7nYGkAAAQDAEgwRgIhAPMk3oDZrcqImM1P5DTlV2g66Fd8vzZuzEwryLHi\n"
+    "r5CBAiEAydCWA7AwtLDZzCuGz3erdbOUf9Xtv4CKhdCB56aq4mcwCgYIKoZIzj0E\n"
+    "AwIDRwAwRAIgV/8yoUEmOfB9EKqfjcJMOotxY/X2mDDTIjYgTXveyjkCIHCHty68\n"
+    "+d9psmRwMhNy6WwGVcU/S/XM+fQxOe/qp2ES\n"
+    "-----END CERTIFICATE-----";
 
 const int SSID_ADDR = 0;
 const int PASS_ADDR = 50;
 const int EEPROM_SIZE = 512;
 
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 19800, 60000);
+
 int led_state = 0;
 
 void indicateSuccessfulConnection();
+static unsigned long lastSendTime = 0;
 
 std::string string_to_hex(const std::string &input)
 {
@@ -82,9 +119,12 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         int measurement = hex_to_int(measurementHex);
         int battery = hex_to_int(batteryHex);
 
-        char postData[256]; // Define a buffer for the data
-        snprintf(postData, sizeof(postData), "{\"DATETIME\":1724343139511,\"IMEI\":\"A4C138CCD9ED\",\"NCU_FW_VER\":109,\"GAS_METER\":%d,\"CSQ\":104,\"MCU_TEMP\":30,\"BAT_VOL\":%d,\"METER_TYPE\":4,\"TIME_ZONE\":\"+07\",\"TANK_SIZE\":\"20lb\",\"GAS_PERCENT\":0}", measurement, battery);
+        unsigned long epochTime = timeClient.getEpochTime();
 
+        char postData[256]; // Define a buffer for the data
+        snprintf(postData, sizeof(postData),
+                 "{\"DATETIME\":%lu,\"IMEI\":\"A4C138CCD9ED\",\"NCU_FW_VER\":109,\"GAS_METER\":%d,\"CSQ\":104,\"MCU_TEMP\":30,\"BAT_VOL\":%d,\"METER_TYPE\":4,\"TIME_ZONE\":\"+07\",\"TANK_SIZE\":\"20lb\",\"GAS_PERCENT\":0, \"RSSI\":%d}",
+                 epochTime, measurement, battery, advertisedDevice.getRSSI());
         Serial.printf("*********************\n");
         // Serial.printf("Received Data: %s\n", format_hex_string(hexAdvData).c_str());
         // Serial.printf("Frame Head: %s\n", frameHead1.c_str());
@@ -94,29 +134,37 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         // Serial.printf("Battery: %d % \n", battery);
         // Serial.printf("RSSI: %d\n", advertisedDevice.getRSSI());
         // Serial.printf("Prepared packet: \n");
-        Serial.printf("{\"DATETIME\":1724343139511,\"IMEI\":\"A4C138CCD9ED\",\"NCU_FW_VER\":109,\"GAS_METER\":%d,\"CSQ\":104,\"MCU_TEMP\":30,\"BAT_VOL\":%d,\"METER_TYPE\":4,\"TIME_ZONE\":\"+07\",\"TANK_SIZE\":\"20lb\",\"GAS_PERCENT\":0}\n\n", measurement, battery);
+        Serial.println(postData);
+        // Serial.println(ESP.getFreeHeap()); // Print available heap memory
 
-        if (WiFi.status() == WL_CONNECTED)
+        if (millis() - lastSendTime > 10000)
         {
-          HTTPClient http;
-          http.begin(serverUrl);
-          http.addHeader("Content-Type", "application/json");
-          int httpResponseCode = http.POST(postData);
-          // Check response code
-          if (httpResponseCode > 0)
+          if (WiFi.status() == WL_CONNECTED)
           {
-            String response = http.getString(); // Get the response to the request
-            Serial.println(httpResponseCode);   // Print response code
-            Serial.println(response);           // Print response payload
+            HTTPClient http;
+            http.begin(serverUrl);
+            http.addHeader("Content-Type", "application/json");
+
+            int httpResponseCode = http.POST(postData);
+            // Check the HTTP response code
+            if (httpResponseCode > 0)
+            {
+              String response = http.getString(); // Get the response payload
+              Serial.println("HTTP Response code: " + String(httpResponseCode));
+              Serial.println("Response: " + response);
+            }
+            else
+            {
+              Serial.println("Error on sending POST: " + String(httpResponseCode));
+            }
+
+            http.end();
           }
           else
           {
-            Serial.printf("Error on sending POST: %s\n", http.errorToString(httpResponseCode).c_str());
+            Serial.println("Could not send data to server. Not connected to Wi-Fi");
           }
-        }
-        else
-        {
-          Serial.println("Could not send data to server. Not connected to Wi-Fi");
+          lastSendTime = millis();
         }
       }
     }
@@ -192,6 +240,7 @@ void loadWiFiCredentials(String &ssid, String &password)
     passBuff[i] = EEPROM.read(PASS_ADDR + i);
 
   ssid = String(ssidBuff);
+  ssid = "SW-AC5-WIN11";
   password = String(passBuff);
   Serial.println("Loaded Wi-Fi credentials from EEPROM");
 }
@@ -372,6 +421,7 @@ void setup()
   server.begin();
   Serial.println("HTTP server started");
   Serial.println("Scanning for Gas sensors...");
+  timeClient.begin();
 
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();
@@ -383,6 +433,7 @@ void setup()
 
 void loop()
 {
+  timeClient.update();
   server.handleClient();
 
   handleButtonPress();
