@@ -46,6 +46,11 @@ int led_state = 0;
 void indicateSuccessfulConnection();
 static unsigned long lastSendTime = 0;
 
+String tankSize = "";
+String timeZone = "";
+String longitude = "";
+String latitude = "";
+
 std::string string_to_hex(const std::string &input)
 {
   static const char hex_digits[] = "0123456789abcdef";
@@ -162,9 +167,11 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
                    "\"MCU_TEMP\":30," +
                    "\"BAT_VOL\":" + String(battery) + "," +
                    "\"METER_TYPE\":4," +
-                   "\"TIME_ZONE\":\"+07\"," +
-                   "\"TANK_SIZE\":\"20lb\"," +
+                   "\"TIME_ZONE\":" + String(timeZone) + "," +
+                   "\"TANK_SIZE\":" + String(tankSize) + "," +
                    "\"GAS_PERCENT\":0, " +
+                   "\"LONGITUDE\":" + String(longitude) + "," +
+                   "\"LATITUDE\":" + String(latitude) + "," +
                    "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
 
         // Ensure there's a delay between transmissions
@@ -250,7 +257,6 @@ void loadWiFiCredentials(String &ssid, String &password)
     passBuff[i] = EEPROM.read(PASS_ADDR + i);
 
   ssid = String(ssidBuff);
-  ssid = "SW-AC5-WIN11";
   password = String(passBuff);
   Serial.println("Loaded Wi-Fi credentials from EEPROM");
 }
@@ -296,26 +302,23 @@ void handle_check_internet_connection()
   {
     if (WiFi.status() == WL_CONNECTED)
     {
-      server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
-      // HTTPClient http;
-      // http.begin("http://www.google.com");
-      // int httpCode = http.GET();
+      if (client.connect("www.google.com", 443))
+      {
+        Serial.println("Connected to the Internet");
 
-      // if (httpCode > 0)
-      // {
-      //   Serial.println("Connected to the Internet");
-      //   http.end();
-      //   server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
-      //   WiFi.mode(WIFI_STA);
-      //   bluetooth_sending_status = true;
-      //   inAPMode = false;
-      // }
-      // else
-      // {
-      //   Serial.println("No Internet access");
-      //   server.send(200, "application/json", "{\"internet_connected\": 0, \"wifi_connected\": 1}");
-      // }
-      // http.end();
+        server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
+
+        WiFi.mode(WIFI_STA);
+        bluetooth_sending_status = true;
+        inAPMode = false;
+      }
+      else
+      {
+        Serial.println("No Internet access");
+        server.send(200, "application/json", "{\"internet_connected\": 0, \"wifi_connected\": 1}");
+      }
+
+      client.stop();
     }
     else
     {
@@ -333,11 +336,51 @@ void indicateSuccessfulConnection()
   inAPMode = false;                // Exit AP mode, stop blinking
 }
 
+void handle_other_config()
+{
+  if (server.method() == HTTP_POST && server.uri() == "/configuration/v1/other-config")
+  {
+    Serial.println("Receiving other configuration data");
+
+    JsonDocument doc;
+    String requestBody = server.arg("plain");
+    DeserializationError error = deserializeJson(doc, requestBody);
+
+    if (error)
+    {
+      Serial.print("JSON parse error: ");
+      Serial.println(error.c_str());
+      server.send(400, "text/plain", "Invalid JSON");
+      return;
+    }
+
+    tankSize = doc["tankSize"].as<String>();
+    timeZone = doc["timeZone"].as<String>();
+    longitude = doc["longitude"].as<String>();
+    latitude = doc["latitude"].as<String>();
+
+    Serial.print("Received TankSize: ");
+    Serial.print(tankSize);
+    Serial.print("\tTimeZone: ");
+    Serial.print(timeZone);
+    Serial.print("\tLongitude: ");
+    Serial.print(longitude);
+    Serial.print("\tLatitude: ");
+    Serial.println(latitude);
+
+    server.send(200, "application/json", "{\"status\": 1}");
+  }
+  else
+  {
+    server.send(405, "text/plain", "Method Not Allowed");
+  }
+}
+
 void handle_connect_to_new_wifi()
 {
   if (server.method() == HTTP_POST)
   {
-    JsonDocument doc; // Allocate a fixed size for the JSON document
+    JsonDocument doc;
 
     String requestBody = server.arg("plain");
     DeserializationError error = deserializeJson(doc, requestBody);
@@ -413,6 +456,7 @@ void setup()
   digitalWrite(BUILTIN_LED, LOW);
 
   server.on("/configuration/v1/wifi-config", HTTP_POST, handle_connect_to_new_wifi);
+  server.on("/configuration/v1/other-config", HTTP_POST, handle_other_config);
   server.on("/check/v1/check-internet", HTTP_GET, handle_check_internet_connection);
 
   // Try to connect to saved Wi-Fi credentials
