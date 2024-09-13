@@ -25,7 +25,7 @@ const long interval = 500;
 
 const char *serverHost = "elysiumapi.overleap.lk";
 const int httpsPort = 443;
-const char *apiPath = "/api/v1/gas/stream"; // API endpoint
+const char *apiPath = "/api/v2/gas/stream/esp32_que"; // API endpoint
 
 BLEScan *pBLEScan;
 
@@ -46,10 +46,10 @@ int led_state = 0;
 void indicateSuccessfulConnection();
 static unsigned long lastSendTime = 0;
 
-String tankSize = "";
-String timeZone = "";
-String longitude = "";
-String latitude = "";
+String tankSize = "NA";
+String timeZone = "NA";
+String longitude = "NA";
+String latitude = "NA";
 
 std::string string_to_hex(const std::string &input)
 {
@@ -158,7 +158,6 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 
         unsigned long epochTime = timeClient.getEpochTime();
 
-        // Instead of using char arrays, let's use a safer String object
         postData = String("{\"DATETIME\":") + String(epochTime) +
                    ",\"IMEI\":\"A4C138CCD9ED\"," +
                    "\"NCU_FW_VER\":109," +
@@ -167,11 +166,11 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
                    "\"MCU_TEMP\":30," +
                    "\"BAT_VOL\":" + String(battery) + "," +
                    "\"METER_TYPE\":4," +
-                   "\"TIME_ZONE\":" + String(timeZone) + "," +
-                   "\"TANK_SIZE\":" + String(tankSize) + "," +
+                   "\"TIME_ZONE\":\"" + String(timeZone) + "\"," +
+                   "\"TANK_SIZE\":\"" + String(tankSize) + "\"," +
                    "\"GAS_PERCENT\":0, " +
-                   "\"LONGITUDE\":" + String(longitude) + "," +
-                   "\"LATITUDE\":" + String(latitude) + "," +
+                   "\"LONGITUDE\":\"" + String(longitude) + "\"," +
+                   "\"LATITUDE\":\"" + String(latitude) + "\"," +
                    "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
 
         // Ensure there's a delay between transmissions
@@ -288,7 +287,10 @@ bool tryConnectToSavedWiFi()
       Serial.println("\nSuccessfully connected to saved Wi-Fi");
       Serial.print("IP Address: ");
       Serial.println(WiFi.localIP());
-      bluetooth_sending_status = true;
+      if (timeZone != "NA" && tankSize != "NA" && longitude != "NA" && latitude != "NA")
+      {
+        bluetooth_sending_status = true;
+      }
       indicateSuccessfulConnection();
       return true;
     }
@@ -309,7 +311,10 @@ void handle_check_internet_connection()
         server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
 
         WiFi.mode(WIFI_STA);
-        bluetooth_sending_status = true;
+        if (timeZone != "NA" && tankSize != "NA" && longitude != "NA" && latitude != "NA")
+        {
+          bluetooth_sending_status = true;
+        }
         inAPMode = false;
       }
       else
@@ -369,6 +374,12 @@ void handle_other_config()
     Serial.println(latitude);
 
     server.send(200, "application/json", "{\"status\": 1}");
+
+    if (WiFi.status() == WL_CONNECTED)
+    {
+      bluetooth_sending_status = true;
+    }
+    Serial.println("Bluetooth sending status set to true");
   }
   else
   {
