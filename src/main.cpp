@@ -412,8 +412,8 @@ void setup()
   pinMode(BUILTIN_LED, OUTPUT);
   digitalWrite(BUILTIN_LED, LOW);
 
-  server.on("/connect-to-new-wifi", HTTP_POST, handle_connect_to_new_wifi);
-  server.on("/check-internet", HTTP_GET, handle_check_internet_connection);
+  server.on("/configuration/v1/wifi-config", HTTP_POST, handle_connect_to_new_wifi);
+  server.on("/check/v1/check-internet", HTTP_GET, handle_check_internet_connection);
 
   // Try to connect to saved Wi-Fi credentials
   if (!tryConnectToSavedWiFi())
