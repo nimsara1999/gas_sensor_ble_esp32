@@ -9,8 +9,9 @@
 #include <BLEAdvertisedDevice.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-// #include <WiFiClientSecure.h>
-// #include <ArduinoHttpClient.h>
+#include <AsyncTCP.h>
+#include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
 
 const char *ap_ssid = "Gateway";
 const char *ap_password = "123456789";
@@ -22,39 +23,14 @@ bool bluetooth_sending_status = false;
 unsigned long previousMillis = 0;
 const long interval = 500;
 
-// const char *serverUrl = "https://mockapi.io/projects/66e0c26e2fb67ac16f2a8398#";
-const char *serverUrl = "jsonplaceholder.typicode.com";
-// const char *serverUrl = "https://elysiumapi.overleap.lk/api/v1/gas/stream";
-const int serverPort = 443; // Standard HTTPS port
+const char *serverHost = "elysiumapi.overleap.lk";
+const int httpsPort = 443;
+const char *apiPath = "/api/v1/gas/stream"; // API endpoint
 
 BLEScan *pBLEScan;
+
 WebServer server(80);
-
-// WiFiClientSecure wifiClient;
-
-const char *rootCACertificate =
-    "-----BEGIN CERTIFICATE-----\n"
-    "MIIDpzCCA06gAwIBAgIQdejYjznIYgETZBgOsch3VjAKBggqhkjOPQQDAjA7MQsw\n"
-    "CQYDVQQGEwJVUzEeMBwGA1UEChMVR29vZ2xlIFRydXN0IFNlcnZpY2VzMQwwCgYD\n"
-    "VQQDEwNXRTEwHhcNMjQwODIwMDcyOTAyWhcNMjQxMTE4MDcyOTAxWjAXMRUwEwYD\n"
-    "VQQDEwx0eXBpY29kZS5jb20wWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARsuzL/\n"
-    "o7KTI+BvU0j6DSz8qHQxR/E4yH1OjVsz25iWduFMajk1oOooN+DOwSIyk5WyLao/\n"
-    "TMSFcsQ/3KFbkcZDo4ICVjCCAlIwDgYDVR0PAQH/BAQDAgeAMBMGA1UdJQQMMAoG\n"
-    "CCsGAQUFBwMBMAwGA1UdEwEB/wQCMAAwHQYDVR0OBBYEFPZMW366VYShU4L4QUQy\n"
-    "bFL2Cky3MB8GA1UdIwQYMBaAFJB3kjVnxP+ozKnme9mAeXvMk/k4MF4GCCsGAQUF\n"
-    "BwEBBFIwUDAnBggrBgEFBQcwAYYbaHR0cDovL28ucGtpLmdvb2cvcy93ZTEvZGVn\n"
-    "MCUGCCsGAQUFBzAChhlodHRwOi8vaS5wa2kuZ29vZy93ZTEuY3J0MCcGA1UdEQQg\n"
-    "MB6CDHR5cGljb2RlLmNvbYIOKi50eXBpY29kZS5jb20wEwYDVR0gBAwwCjAIBgZn\n"
-    "gQwBAgEwNgYDVR0fBC8wLTAroCmgJ4YlaHR0cDovL2MucGtpLmdvb2cvd2UxL1h3\n"
-    "N2s5OTVCdlZnLmNybDCCAQUGCisGAQQB1nkCBAIEgfYEgfMA8QB2AO7N0GTV2xrO\n"
-    "xVy3nbTNE6Iyh0Z8vOzew1FIWUZxH7WbAAABkW7nYEAAAAQDAEcwRQIgatvQ+qUI\n"
-    "OeFGZKsu/Bxbm3cVeD6NcGcAetfETDKIVqoCIQCP9B8ifu3fMTNpsPnOofNZdAh1\n"
-    "ra1yFGUlaRjV/btE8AB3AEiw42vapkc0D+VqAvqdMOscUgHLVt0sgdm7v6s52IRz\n"
-    "AAABkW7nYGkAAAQDAEgwRgIhAPMk3oDZrcqImM1P5DTlV2g66Fd8vzZuzEwryLHi\n"
-    "r5CBAiEAydCWA7AwtLDZzCuGz3erdbOUf9Xtv4CKhdCB56aq4mcwCgYIKoZIzj0E\n"
-    "AwIDRwAwRAIgV/8yoUEmOfB9EKqfjcJMOotxY/X2mDDTIjYgTXveyjkCIHCHty68\n"
-    "+d9psmRwMhNy6WwGVcU/S/XM+fQxOe/qp2ES\n"
-    "-----END CERTIFICATE-----";
+WiFiClientSecure client;
 
 const int SSID_ADDR = 0;
 const int PASS_ADDR = 50;
@@ -62,6 +38,8 @@ const int EEPROM_SIZE = 512;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 19800, 60000);
+
+String postData;
 
 int led_state = 0;
 
@@ -100,14 +78,68 @@ int hex_to_int(const std::string &hexString)
   return strtol(hexString.c_str(), nullptr, 16);
 }
 
+void sendDataToServer(void *param)
+{
+  if (client.connect(serverHost, httpsPort))
+  {
+    Serial.println("Connected to server!");
+
+    client.println(String("POST ") + apiPath + " HTTP/1.1");
+    client.println(String("Host: ") + serverHost);
+    client.println("Content-Type: application/json");
+    client.print("Content-Length: ");
+    client.println(postData.length());
+    client.println();
+    client.println(postData);
+
+    unsigned long timeout = millis();
+    bool isHeader = true;
+    int responseCode = -1;
+    String responseBody = "";
+
+    while (client.connected() && (millis() - timeout) < 5000)
+    {
+      String response = client.readString();
+      responseCode = response.substring(9, 12).toInt();
+      Serial.println("Server responseCode:");
+      Serial.println(responseCode);
+      if (responseCode == 200)
+      {
+        Serial.println("Data sent successfully");
+        break;
+      }
+    }
+    client.stop();
+  }
+  else
+  {
+    Serial.println("Connection to server failed");
+  }
+
+  vTaskDelete(NULL); // Delete the task once the HTTPS request is done
+}
+
+void createHTTPSTask()
+{
+  xTaskCreate(
+      sendDataToServer, // Task function
+      "HTTPS Task",     // Task name
+      8192,             // Stack size
+      NULL,             // Task input parameter
+      1,                // Priority
+      NULL              // Task handle
+  );
+}
+
 class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 {
+
   void onResult(BLEAdvertisedDevice advertisedDevice)
   {
     if (strcmp(advertisedDevice.getName().c_str(), "") == 0)
     {
       std::string hexAdvData = string_to_hex(advertisedDevice.getManufacturerData());
-      if (hexAdvData.rfind("544e", 0) == 0)
+      if (hexAdvData.rfind("544e", 0) == 0) // Check for a valid prefix
       {
         std::string frameHead1 = hexAdvData.substr(0, 4);
         std::string type = hexAdvData.substr(4, 2);
@@ -121,49 +153,27 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 
         unsigned long epochTime = timeClient.getEpochTime();
 
-        char postData[256]; // Define a buffer for the data
-        snprintf(postData, sizeof(postData),
-                 "{\"DATETIME\":%lu,\"IMEI\":\"A4C138CCD9ED\",\"NCU_FW_VER\":109,\"GAS_METER\":%d,\"CSQ\":104,\"MCU_TEMP\":30,\"BAT_VOL\":%d,\"METER_TYPE\":4,\"TIME_ZONE\":\"+07\",\"TANK_SIZE\":\"20lb\",\"GAS_PERCENT\":0, \"RSSI\":%d}",
-                 epochTime, measurement, battery, advertisedDevice.getRSSI());
-        Serial.printf("*********************\n");
-        // Serial.printf("Received Data: %s\n", format_hex_string(hexAdvData).c_str());
-        // Serial.printf("Frame Head: %s\n", frameHead1.c_str());
-        // Serial.printf("Type: %s\n", type.c_str());
-        // Serial.printf("Cmd: %s\n", cmd.c_str());
-        // Serial.printf("Measurement Result (US): %d\n", measurement);
-        // Serial.printf("Battery: %d % \n", battery);
-        // Serial.printf("RSSI: %d\n", advertisedDevice.getRSSI());
-        // Serial.printf("Prepared packet: \n");
-        Serial.println(postData);
-        // Serial.println(ESP.getFreeHeap()); // Print available heap memory
+        // Instead of using char arrays, let's use a safer String object
+        postData = String("{\"DATETIME\":") + String(epochTime) +
+                   ",\"IMEI\":\"A4C138CCD9ED\"," +
+                   "\"NCU_FW_VER\":109," +
+                   "\"GAS_METER\":" + String(measurement) + "," +
+                   "\"CSQ\":104," +
+                   "\"MCU_TEMP\":30," +
+                   "\"BAT_VOL\":" + String(battery) + "," +
+                   "\"METER_TYPE\":4," +
+                   "\"TIME_ZONE\":\"+07\"," +
+                   "\"TANK_SIZE\":\"20lb\"," +
+                   "\"GAS_PERCENT\":0, " +
+                   "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
 
+        // Ensure there's a delay between transmissions
         if (millis() - lastSendTime > 10000)
         {
-          if (WiFi.status() == WL_CONNECTED)
-          {
-            HTTPClient http;
-            http.begin(serverUrl);
-            http.addHeader("Content-Type", "application/json");
-
-            int httpResponseCode = http.POST(postData);
-            // Check the HTTP response code
-            if (httpResponseCode > 0)
-            {
-              String response = http.getString(); // Get the response payload
-              Serial.println("HTTP Response code: " + String(httpResponseCode));
-              Serial.println("Response: " + response);
-            }
-            else
-            {
-              Serial.println("Error on sending POST: " + String(httpResponseCode));
-            }
-
-            http.end();
-          }
-          else
-          {
-            Serial.println("Could not send data to server. Not connected to Wi-Fi");
-          }
+          Serial.println("****************************************************************************************************");
+          Serial.println("Received JSON Data:");
+          Serial.println(postData);
+          createHTTPSTask();
           lastSendTime = millis();
         }
       }
@@ -286,25 +296,26 @@ void handle_check_internet_connection()
   {
     if (WiFi.status() == WL_CONNECTED)
     {
-      HTTPClient http;
-      http.begin("http://www.google.com");
-      int httpCode = http.GET();
+      server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
+      // HTTPClient http;
+      // http.begin("http://www.google.com");
+      // int httpCode = http.GET();
 
-      if (httpCode > 0)
-      {
-        Serial.println("Connected to the Internet");
-        http.end();
-        server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
-        WiFi.mode(WIFI_STA);
-        bluetooth_sending_status = true;
-        inAPMode = false;
-      }
-      else
-      {
-        Serial.println("No Internet access");
-        server.send(200, "application/json", "{\"internet_connected\": 0, \"wifi_connected\": 1}");
-      }
-      http.end();
+      // if (httpCode > 0)
+      // {
+      //   Serial.println("Connected to the Internet");
+      //   http.end();
+      //   server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
+      //   WiFi.mode(WIFI_STA);
+      //   bluetooth_sending_status = true;
+      //   inAPMode = false;
+      // }
+      // else
+      // {
+      //   Serial.println("No Internet access");
+      //   server.send(200, "application/json", "{\"internet_connected\": 0, \"wifi_connected\": 1}");
+      // }
+      // http.end();
     }
     else
     {
@@ -420,6 +431,9 @@ void setup()
 
   server.begin();
   Serial.println("HTTP server started");
+
+  client.setInsecure(); // For development purposes, skip certificate validation
+
   Serial.println("Scanning for Gas sensors...");
   timeClient.begin();
 
