@@ -34,6 +34,10 @@ WiFiClientSecure client;
 
 const int SSID_ADDR = 0;
 const int PASS_ADDR = 50;
+const int TANKSIZE_ADDR = 100;
+const int TIMEZONE_ADDR = 150;
+const int LONGITUDE_ADDR = 200;
+const int LATITUDE_ADDR = 250;
 const int EEPROM_SIZE = 512;
 
 WiFiUDP ntpUDP;
@@ -87,7 +91,10 @@ void sendDataToServer(void *param)
 {
   if (client.connect(serverHost, httpsPort))
   {
-    Serial.println("Connected to server!");
+    Serial.println("****************************************************************************************************");
+    Serial.println("Connected to server. Sending data...");
+    Serial.println("JSON Data:");
+    Serial.println(postData);
 
     client.println(String("POST ") + apiPath + " HTTP/1.1");
     client.println(String("Host: ") + serverHost);
@@ -106,7 +113,7 @@ void sendDataToServer(void *param)
     {
       String response = client.readString();
       responseCode = response.substring(9, 12).toInt();
-      Serial.println("Server responseCode:");
+      Serial.print("Server responseCode: ");
       Serial.println(responseCode);
       if (responseCode == 200)
       {
@@ -152,14 +159,18 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         std::string frameHead2 = hexAdvData.substr(8, 4);
         std::string measurementHex = hexAdvData.substr(12, 4);
         std::string batteryHex = hexAdvData.substr(16, 2);
+        std::string macAddress = hexAdvData.substr(42, 12);
 
         int measurement = hex_to_int(measurementHex);
         int battery = hex_to_int(batteryHex);
 
+        Serial.print("Received Payload: ");
+        Serial.println(hexAdvData.c_str());
+
         unsigned long epochTime = timeClient.getEpochTime();
 
         postData = String("{\"DATETIME\":") + String(epochTime) +
-                   ",\"IMEI\":\"A4C138CCD9ED\"," +
+                   ",\"IMEI\":\"" + String(macAddress.c_str()) + "\"," +
                    "\"NCU_FW_VER\":109," +
                    "\"GAS_METER\":" + String(measurement) + "," +
                    "\"CSQ\":104," +
@@ -176,9 +187,6 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         // Ensure there's a delay between transmissions
         if (millis() - lastSendTime > 10000)
         {
-          Serial.println("****************************************************************************************************");
-          Serial.println("Received JSON Data:");
-          Serial.println(postData);
           createHTTPSTask();
           lastSendTime = millis();
         }
@@ -243,6 +251,33 @@ void saveWiFiCredentials(const String &ssid, const String &password)
   EEPROM.commit();
 }
 
+void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone, const String &longitude, const String &latitude)
+{
+  EEPROM.begin(EEPROM_SIZE);
+
+  for (int i = TANKSIZE_ADDR; i < TANKSIZE_ADDR + 50; i++)
+    EEPROM.write(i, 0);
+  for (int i = TIMEZONE_ADDR; i < TIMEZONE_ADDR + 50; i++)
+    EEPROM.write(i, 0);
+  for (int i = LONGITUDE_ADDR; i < LONGITUDE_ADDR + 50; i++)
+    EEPROM.write(i, 0);
+  for (int i = LATITUDE_ADDR; i < LATITUDE_ADDR + 50; i++)
+    EEPROM.write(i, 0);
+
+  for (int i = 0; i < tankSize.length(); i++)
+    EEPROM.write(TANKSIZE_ADDR + i, tankSize[i]);
+  for (int i = 0; i < timeZone.length(); i++)
+    EEPROM.write(TIMEZONE_ADDR + i, timeZone[i]);
+  for (int i = 0; i < longitude.length(); i++)
+    EEPROM.write(LONGITUDE_ADDR + i, longitude[i]);
+  for (int i = 0; i < latitude.length(); i++)
+    EEPROM.write(LATITUDE_ADDR + i, latitude[i]);
+
+  Serial.println("Saved other configuration data to EEPROM");
+
+  EEPROM.commit();
+}
+
 void loadWiFiCredentials(String &ssid, String &password)
 {
   EEPROM.begin(EEPROM_SIZE);
@@ -258,6 +293,27 @@ void loadWiFiCredentials(String &ssid, String &password)
   ssid = String(ssidBuff);
   password = String(passBuff);
   Serial.println("Loaded Wi-Fi credentials from EEPROM");
+
+  char tankSizeBuff[50];
+  char timeZoneBuff[50];
+  char longitudeBuff[50];
+  char latitudeBuff[50];
+
+  for (int i = 0; i < 50; i++)
+    tankSizeBuff[i] = EEPROM.read(TANKSIZE_ADDR + i);
+  for (int i = 0; i < 50; i++)
+    timeZoneBuff[i] = EEPROM.read(TIMEZONE_ADDR + i);
+  for (int i = 0; i < 50; i++)
+    longitudeBuff[i] = EEPROM.read(LONGITUDE_ADDR + i);
+  for (int i = 0; i < 50; i++)
+    latitudeBuff[i] = EEPROM.read(LATITUDE_ADDR + i);
+
+  tankSize = String(tankSizeBuff);
+  timeZone = String(timeZoneBuff);
+  longitude = String(longitudeBuff);
+  latitude = String(latitudeBuff);
+
+  Serial.println("Loaded other configuration data from EEPROM");
 }
 
 bool tryConnectToSavedWiFi()
@@ -379,6 +435,10 @@ void handle_other_config()
     {
       bluetooth_sending_status = true;
     }
+
+    saveOtherConfigDataToEEPROM(tankSize, timeZone, longitude, latitude);
+    Serial.println("Saved other configuration data to EEPROM");
+
     Serial.println("Bluetooth sending status set to true");
   }
   else
