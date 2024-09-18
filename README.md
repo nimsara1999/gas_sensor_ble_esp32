@@ -12,7 +12,7 @@ Open VS Code, and go to platformIO in the leftmost tab. Then click on “Clone G
 
 ### Step 3
 
-Type in the GitHub clone link and wait for the cloning to happen.
+Type in the GitHub clone link (https://github.com/nimsara1999/gas_sensor_ble_esp32.git) and wait for the cloning to happen.
 
 ### Step 4
 
