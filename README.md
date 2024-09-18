@@ -1,4 +1,4 @@
-﻿**Steps for uploading the firmware to the Gateway.**
+**Steps for uploading the firmware to the Gateway.**
 
 Step 1:
 
@@ -8,7 +8,7 @@ Step 2:
 
 Open VS Code, and go to platformIO in the leftmost tab. Then click on “Clone Git Project” under Miscellaneous section.
 
-![](Aspose.Words.91dfb1e5-fbed-4881-acb6-5b0cf787e9ad.001.png)
+![](images/img1.png)
 
 Step 3:
 
@@ -22,4 +22,4 @@ Now connect the ESP board via USB and click on Build.
 
 After Build is completed, click on Upload. (or Upload and Monitor).
 
-![](Aspose.Words.91dfb1e5-fbed-4881-acb6-5b0cf787e9ad.002.png)
+![](images/img2.png)
