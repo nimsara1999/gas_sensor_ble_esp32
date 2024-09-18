@@ -13,47 +13,54 @@
 #include <ArduinoJson.h>
 #include <WiFiClientSecure.h>
 
-const char *ap_ssid = "Gateway";
-const char *ap_password = "123456789";
-const int scanTimeSeconds = 1;
-
-const int BOOT_PIN = 9;
 bool inAPMode = false;
 bool bluetooth_sending_status = false;
 unsigned long previousMillis = 0;
-const long interval = 500;
+const long blink_interval = 500;
+int led_state = 0;
 
-const char *serverHost = "elysiumapi.overleap.lk";
-const int httpsPort = 443;
-const char *apiPath = "/api/v2/gas/stream/esp32_que"; // API endpoint
+// String tankSize = "NA";
+// String timeZone = "NA";
+// String longitude = "NA";
+// String latitude = "NA";
+// String loadedHeight = "NA";
 
-BLEScan *pBLEScan;
+String tankSize = "100";
+String timeZone = "a";
+String longitude = "b";
+String latitude = "c";
+String loadedHeight = "80";
 
-WebServer server(80);
-WiFiClientSecure client;
-
+const int scanTimeSeconds = 1;
+const int BOOT_PIN = 9;
 const int SSID_ADDR = 0;
 const int PASS_ADDR = 50;
 const int TANKSIZE_ADDR = 100;
 const int TIMEZONE_ADDR = 150;
 const int LONGITUDE_ADDR = 200;
 const int LATITUDE_ADDR = 250;
+const int LOADED_HEIGHT_ADDR = 300;
 const int EEPROM_SIZE = 512;
+const int httpsPort = 443;
+const char *ap_ssid = "Gateway";
+const char *ap_password = "123456789";
+const char *serverHost = "elysiumapi.overleap.lk";
+const char *apiPath = "/api/v2/gas/stream/esp32_que"; // API endpoint
+
+static unsigned long lastSendTime = 0;
+
+BLEScan *pBLEScan;
+
+WebServer server(80);
+WiFiClientSecure client;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 19800, 60000);
 
 String postData;
 
-int led_state = 0;
-
 void indicateSuccessfulConnection();
-static unsigned long lastSendTime = 0;
-
-String tankSize = "NA";
-String timeZone = "NA";
-String longitude = "NA";
-String latitude = "NA";
+void indicateSuccessfulDataSendToServer();
 
 std::string string_to_hex(const std::string &input)
 {
@@ -118,6 +125,7 @@ void sendDataToServer(void *param)
       if (responseCode == 200)
       {
         Serial.println("Data sent successfully");
+        indicateSuccessfulDataSendToServer();
         break;
       }
     }
@@ -164,9 +172,10 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         int measurement = hex_to_int(measurementHex);
         int battery = hex_to_int(batteryHex);
 
-        Serial.print("Received Payload: ");
-        Serial.println(hexAdvData.c_str());
+        // Serial.print("Received Payload: ");
+        // Serial.println(hexAdvData.c_str());
 
+        timeClient.update();
         unsigned long epochTime = timeClient.getEpochTime();
 
         postData = String("{\"DATETIME\":") + String(epochTime) +
@@ -179,9 +188,10 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
                    "\"METER_TYPE\":4," +
                    "\"TIME_ZONE\":\"" + String(timeZone) + "\"," +
                    "\"TANK_SIZE\":\"" + String(tankSize) + "\"," +
-                   "\"GAS_PERCENT\":0, " +
+                   "\"GAS_PERCENT\":" + String(measurement * 100 / loadedHeight.toFloat()) + "," +
                    "\"LONGITUDE\":\"" + String(longitude) + "\"," +
                    "\"LATITUDE\":\"" + String(latitude) + "\"," +
+                   "\"LOADED_HEIGHT\":\"" + String(loadedHeight.toFloat()) + "\"," +
                    "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
 
         // Ensure there's a delay between transmissions
@@ -197,27 +207,25 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 
 void switchToAPMode()
 {
-  Serial.println("Switching to AP mode...");
+  Serial.println("\n\n****************************************************************************************************\n****************************************************************************************************");
+  Serial.println("\nSwitching to AP mode...");
   bluetooth_sending_status = false;
   WiFi.mode(WIFI_AP);
   inAPMode = true;
   WiFi.softAP(ap_ssid, ap_password);
-  Serial.println("Access Point Started");
+  Serial.println("\nAccess Point Started");
   Serial.print("AP IP Address: ");
   Serial.println(WiFi.softAPIP());
 }
 
 void blinkLEDInAPMode()
 {
-  if (inAPMode)
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= blink_interval)
   {
-    unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis >= interval)
-    {
-      previousMillis = currentMillis;
-      led_state = !led_state;
-      digitalWrite(BUILTIN_LED, led_state);
-    }
+    previousMillis = currentMillis;
+    led_state = !led_state;
+    digitalWrite(BUILTIN_LED, led_state);
   }
 }
 
@@ -251,7 +259,7 @@ void saveWiFiCredentials(const String &ssid, const String &password)
   EEPROM.commit();
 }
 
-void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone, const String &longitude, const String &latitude)
+void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone, const String &longitude, const String &latitude, const String &loadedHeight)
 {
   EEPROM.begin(EEPROM_SIZE);
 
@@ -263,6 +271,8 @@ void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone,
     EEPROM.write(i, 0);
   for (int i = LATITUDE_ADDR; i < LATITUDE_ADDR + 50; i++)
     EEPROM.write(i, 0);
+  for (int i = LOADED_HEIGHT_ADDR; i < LOADED_HEIGHT_ADDR + 50; i++)
+    EEPROM.write(i, 0);
 
   for (int i = 0; i < tankSize.length(); i++)
     EEPROM.write(TANKSIZE_ADDR + i, tankSize[i]);
@@ -272,10 +282,11 @@ void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone,
     EEPROM.write(LONGITUDE_ADDR + i, longitude[i]);
   for (int i = 0; i < latitude.length(); i++)
     EEPROM.write(LATITUDE_ADDR + i, latitude[i]);
-
-  Serial.println("Saved other configuration data to EEPROM");
+  for (int i = 0; i < loadedHeight.length(); i++)
+    EEPROM.write(LOADED_HEIGHT_ADDR + i, loadedHeight[i]);
 
   EEPROM.commit();
+  Serial.println("Saved other configuration data to EEPROM");
 }
 
 void loadWiFiCredentials(String &ssid, String &password)
@@ -298,6 +309,7 @@ void loadWiFiCredentials(String &ssid, String &password)
   char timeZoneBuff[50];
   char longitudeBuff[50];
   char latitudeBuff[50];
+  char loadedHeightBuff[50];
 
   for (int i = 0; i < 50; i++)
     tankSizeBuff[i] = EEPROM.read(TANKSIZE_ADDR + i);
@@ -307,11 +319,14 @@ void loadWiFiCredentials(String &ssid, String &password)
     longitudeBuff[i] = EEPROM.read(LONGITUDE_ADDR + i);
   for (int i = 0; i < 50; i++)
     latitudeBuff[i] = EEPROM.read(LATITUDE_ADDR + i);
+  for (int i = 0; i < 50; i++)
+    loadedHeightBuff[i] = EEPROM.read(LOADED_HEIGHT_ADDR + i);
 
   tankSize = String(tankSizeBuff);
   timeZone = String(timeZoneBuff);
   longitude = String(longitudeBuff);
   latitude = String(latitudeBuff);
+  loadedHeight = String(loadedHeightBuff);
 
   Serial.println("Loaded other configuration data from EEPROM");
 }
@@ -324,7 +339,7 @@ bool tryConnectToSavedWiFi()
   if (savedSSID.length() > 0 && savedPassword.length() > 0)
   {
     Serial.print("Trying to connect to saved SSID: ");
-    Serial.println(savedSSID);
+    Serial.print(savedSSID);
 
     WiFi.begin(savedSSID.c_str(), savedPassword.c_str());
 
@@ -343,11 +358,6 @@ bool tryConnectToSavedWiFi()
       Serial.println("\nSuccessfully connected to saved Wi-Fi");
       Serial.print("IP Address: ");
       Serial.println(WiFi.localIP());
-      if (timeZone != "NA" && tankSize != "NA" && longitude != "NA" && latitude != "NA")
-      {
-        bluetooth_sending_status = true;
-      }
-      indicateSuccessfulConnection();
       return true;
     }
   }
@@ -356,6 +366,7 @@ bool tryConnectToSavedWiFi()
 
 void handle_check_internet_connection()
 {
+  Serial.println("\nChecking Internet connection...");
   if (server.method() == HTTP_GET)
   {
     if (WiFi.status() == WL_CONNECTED)
@@ -363,15 +374,8 @@ void handle_check_internet_connection()
       if (client.connect("www.google.com", 443))
       {
         Serial.println("Connected to the Internet");
-
+        Serial.println("Restart the gateway to start sending data to the server");
         server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
-
-        WiFi.mode(WIFI_STA);
-        if (timeZone != "NA" && tankSize != "NA" && longitude != "NA" && latitude != "NA")
-        {
-          bluetooth_sending_status = true;
-        }
-        inAPMode = false;
       }
       else
       {
@@ -389,19 +393,29 @@ void handle_check_internet_connection()
   }
 }
 
+void indicateSuccessfulDataSendToServer()
+{
+  digitalWrite(BUILTIN_LED, HIGH);
+  delay(30);
+  digitalWrite(BUILTIN_LED, LOW);
+  delay(30);
+  digitalWrite(BUILTIN_LED, HIGH);
+  delay(30);
+  digitalWrite(BUILTIN_LED, LOW);
+}
+
 void indicateSuccessfulConnection()
 {
   digitalWrite(BUILTIN_LED, HIGH); // Turn the LED on
   delay(3000);                     // Keep the LED on for 3 seconds
   digitalWrite(BUILTIN_LED, LOW);  // Turn the LED off
-  inAPMode = false;                // Exit AP mode, stop blinking
 }
 
 void handle_other_config()
 {
   if (server.method() == HTTP_POST && server.uri() == "/configuration/v1/other-config")
   {
-    Serial.println("Receiving other configuration data");
+    Serial.println("\nReceiving other configuration data");
 
     JsonDocument doc;
     String requestBody = server.arg("plain");
@@ -419,6 +433,7 @@ void handle_other_config()
     timeZone = doc["timeZone"].as<String>();
     longitude = doc["longitude"].as<String>();
     latitude = doc["latitude"].as<String>();
+    loadedHeight = doc["loadedHeight"].as<String>();
 
     Serial.print("Received TankSize: ");
     Serial.print(tankSize);
@@ -428,18 +443,13 @@ void handle_other_config()
     Serial.print(longitude);
     Serial.print("\tLatitude: ");
     Serial.println(latitude);
+    Serial.print("\tLoaded Height: ");
+    Serial.println(loadedHeight);
 
     server.send(200, "application/json", "{\"status\": 1}");
 
-    if (WiFi.status() == WL_CONNECTED)
-    {
-      bluetooth_sending_status = true;
-    }
-
-    saveOtherConfigDataToEEPROM(tankSize, timeZone, longitude, latitude);
-    Serial.println("Saved other configuration data to EEPROM");
-
-    Serial.println("Bluetooth sending status set to true");
+    saveOtherConfigDataToEEPROM(tankSize, timeZone, longitude, latitude, loadedHeight);
+    Serial.println("Restart the gateway to start sending data to the server");
   }
   else
   {
@@ -467,10 +477,13 @@ void handle_connect_to_new_wifi()
     String ssid = doc["ssid"].as<String>();
     String password = doc["password"].as<String>();
 
+    Serial.println("\nReceiving Wi-Fi credentials...");
     Serial.print("Received SSID: ");
     Serial.println(ssid);
     Serial.print("Received Password: ");
     Serial.println(password);
+
+    Serial.print("Trying to connect to the new Wi-Fi network");
 
     WiFi.mode(WIFI_AP_STA); // Set mode to both AP and STA
     WiFi.begin(ssid.c_str(), password.c_str());
@@ -504,8 +517,7 @@ void handle_connect_to_new_wifi()
     {
       Serial.println("\nFailed to connect to Wi-Fi");
       server.send(200, "application/json", "{\"status\": 0, \"ssid\": \"" + ssid + "\"}");
-      WiFi.mode(WIFI_AP); // Return to AP mode if connection fails
-      inAPMode = true;
+      WiFi.mode(WIFI_AP);
       WiFi.softAP(ap_ssid, ap_password);
       Serial.println("Re-enabled AP mode");
     }
@@ -529,29 +541,35 @@ void setup()
   server.on("/configuration/v1/wifi-config", HTTP_POST, handle_connect_to_new_wifi);
   server.on("/configuration/v1/other-config", HTTP_POST, handle_other_config);
   server.on("/check/v1/check-internet", HTTP_GET, handle_check_internet_connection);
+  bluetooth_sending_status = false;
 
-  // Try to connect to saved Wi-Fi credentials
-  if (!tryConnectToSavedWiFi())
+  // Try to connect to saved Wi-Fi credentials and load other configuration data
+  if (!tryConnectToSavedWiFi() || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA")
   {
-    // If failed, start in AP mode
     Serial.println("Starting AP mode");
     WiFi.mode(WIFI_AP);
-    inAPMode = true;
     WiFi.softAP(ap_ssid, ap_password);
     Serial.println("Access Point Started");
     Serial.print("AP IP Address: ");
-    bluetooth_sending_status = false;
     Serial.println(WiFi.softAPIP());
+    inAPMode = true;
+  }
+  else
+  {
+    inAPMode = false;
+    WiFi.mode(WIFI_STA);
+    indicateSuccessfulConnection();
+    bluetooth_sending_status = true;
+    Serial.println("Data loaded from EEPROM.");
   }
 
   server.begin();
-  Serial.println("HTTP server started");
 
   client.setInsecure(); // For development purposes, skip certificate validation
 
-  Serial.println("Scanning for Gas sensors...");
   timeClient.begin();
 
+  Serial.println("Scanning for Gas sensors...");
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
@@ -562,14 +580,15 @@ void setup()
 
 void loop()
 {
-  timeClient.update();
   server.handleClient();
 
-  handleButtonPress();
-  blinkLEDInAPMode();
-
-  if (bluetooth_sending_status)
+  if (inAPMode)
   {
+    blinkLEDInAPMode();
+  }
+  else
+  {
+    handleButtonPress();
     BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
     pBLEScan->clearResults();
   }
