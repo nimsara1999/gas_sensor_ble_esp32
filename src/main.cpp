@@ -480,8 +480,7 @@ void handle_connect_to_new_wifi()
     Serial.println("\nReceiving Wi-Fi credentials...");
     Serial.print("Received SSID: ");
     Serial.println(ssid);
-    Serial.print("Received Password: ");
-    Serial.println(password);
+    Serial.println("Received Password");
 
     Serial.print("Trying to connect to the new Wi-Fi network");
 
