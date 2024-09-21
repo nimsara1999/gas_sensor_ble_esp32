@@ -560,6 +560,7 @@ void setup()
     indicateSuccessfulConnection();
     bluetooth_sending_status = true;
     Serial.println("Data loaded from EEPROM.");
+    Serial.println("Scanning for Gas sensors...");
   }
 
   server.begin();
@@ -568,7 +569,6 @@ void setup()
 
   timeClient.begin();
 
-  Serial.println("Scanning for Gas sensors...");
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new AdvertisedDeviceCallbacks());
