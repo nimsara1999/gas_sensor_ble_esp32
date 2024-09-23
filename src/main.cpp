@@ -15,21 +15,17 @@
 
 bool inAPMode = false;
 bool bluetooth_sending_status = false;
+bool inSensorSearchingMode = false;
 unsigned long previousMillis = 0;
 const long blink_interval = 500;
 int led_state = 0;
 
-// String tankSize = "NA";
-// String timeZone = "NA";
-// String longitude = "NA";
-// String latitude = "NA";
-// String loadedHeight = "NA";
-
-String tankSize = "100";
-String timeZone = "a";
-String longitude = "b";
-String latitude = "c";
-String loadedHeight = "80";
+String tankSize = "NA";
+String timeZone = "NA";
+String longitude = "NA";
+String latitude = "NA";
+String loadedHeight = "NA";
+String selected_sensor_mac_address = "NA";
 
 const int scanTimeSeconds = 1;
 const int BOOT_PIN = 9;
@@ -40,6 +36,7 @@ const int TIMEZONE_ADDR = 150;
 const int LONGITUDE_ADDR = 200;
 const int LATITUDE_ADDR = 250;
 const int LOADED_HEIGHT_ADDR = 300;
+const int SENSOR_MAC_ADDR = 350;
 const int EEPROM_SIZE = 512;
 const int httpsPort = 443;
 const char *ap_ssid = "Gateway";
@@ -169,36 +166,53 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         std::string batteryHex = hexAdvData.substr(16, 2);
         std::string macAddress = hexAdvData.substr(42, 12);
 
-        int measurement = hex_to_int(measurementHex);
-        int battery = hex_to_int(batteryHex);
-
-        // Serial.print("Received Payload: ");
-        // Serial.println(hexAdvData.c_str());
-
-        timeClient.update();
-        unsigned long epochTime = timeClient.getEpochTime();
-
-        postData = String("{\"DATETIME\":") + String(epochTime) +
-                   ",\"IMEI\":\"" + String(macAddress.c_str()) + "\"," +
-                   "\"NCU_FW_VER\":109," +
-                   "\"GAS_METER\":" + String(measurement) + "," +
-                   "\"CSQ\":104," +
-                   "\"MCU_TEMP\":30," +
-                   "\"BAT_VOL\":" + String(battery) + "," +
-                   "\"METER_TYPE\":4," +
-                   "\"TIME_ZONE\":\"" + String(timeZone) + "\"," +
-                   "\"TANK_SIZE\":\"" + String(tankSize) + "\"," +
-                   "\"GAS_PERCENT\":" + String(measurement * 100 / loadedHeight.toFloat()) + "," +
-                   "\"LONGITUDE\":\"" + String(longitude) + "\"," +
-                   "\"LATITUDE\":\"" + String(latitude) + "\"," +
-                   "\"LOADED_HEIGHT\":\"" + String(loadedHeight.toFloat()) + "\"," +
-                   "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
-
-        // Ensure there's a delay between transmissions
-        if (millis() - lastSendTime > 10000)
+        if (inSensorSearchingMode)
         {
-          createHTTPSTask();
-          lastSendTime = millis();
+          if (type == "21")
+          {
+            Serial.println("\nFound a SYNCed sensor");
+            inSensorSearchingMode = false;
+            selected_sensor_mac_address = macAddress.c_str();
+            Serial.print("MAC Address: ");
+            Serial.println(selected_sensor_mac_address);
+          }
+        }
+        else
+        {
+          if (strcmp(macAddress.c_str(), selected_sensor_mac_address.c_str()) == 0)
+          {
+            int measurement = hex_to_int(measurementHex);
+            int battery = hex_to_int(batteryHex);
+
+            // Serial.print("Received Payload: ");
+            // Serial.println(hexAdvData.c_str());
+
+            timeClient.update();
+            unsigned long epochTime = timeClient.getEpochTime();
+
+            postData = String("{\"DATETIME\":") + String(epochTime) +
+                       ",\"IMEI\":\"" + String(macAddress.c_str()) + "\"," +
+                       "\"NCU_FW_VER\":109," +
+                       "\"GAS_METER\":" + String(measurement) + "," +
+                       "\"CSQ\":104," +
+                       "\"MCU_TEMP\":30," +
+                       "\"BAT_VOL\":" + String(battery) + "," +
+                       "\"METER_TYPE\":4," +
+                       "\"TIME_ZONE\":\"" + String(timeZone) + "\"," +
+                       "\"TANK_SIZE\":\"" + String(tankSize) + "\"," +
+                       "\"GAS_PERCENT\":" + String(measurement * 100 / loadedHeight.toFloat()) + "," +
+                       "\"LONGITUDE\":\"" + String(longitude) + "\"," +
+                       "\"LATITUDE\":\"" + String(latitude) + "\"," +
+                       "\"LOADED_HEIGHT\":\"" + String(loadedHeight.toFloat()) + "\"," +
+                       "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
+
+            // Ensure there's a delay between transmissions
+            if (millis() - lastSendTime > 5000)
+            {
+              createHTTPSTask();
+              lastSendTime = millis();
+            }
+          }
         }
       }
     }
@@ -310,6 +324,7 @@ void loadWiFiCredentials(String &ssid, String &password)
   char longitudeBuff[50];
   char latitudeBuff[50];
   char loadedHeightBuff[50];
+  char selectedSensorMacBuff[50];
 
   for (int i = 0; i < 50; i++)
     tankSizeBuff[i] = EEPROM.read(TANKSIZE_ADDR + i);
@@ -321,12 +336,15 @@ void loadWiFiCredentials(String &ssid, String &password)
     latitudeBuff[i] = EEPROM.read(LATITUDE_ADDR + i);
   for (int i = 0; i < 50; i++)
     loadedHeightBuff[i] = EEPROM.read(LOADED_HEIGHT_ADDR + i);
+  for (int i = 0; i < 50; i++)
+    selectedSensorMacBuff[i] = EEPROM.read(SENSOR_MAC_ADDR + i);
 
   tankSize = String(tankSizeBuff);
   timeZone = String(timeZoneBuff);
   longitude = String(longitudeBuff);
   latitude = String(latitudeBuff);
   loadedHeight = String(loadedHeightBuff);
+  selected_sensor_mac_address = String(selectedSensorMacBuff);
 
   Serial.println("Loaded other configuration data from EEPROM");
 }
@@ -527,6 +545,48 @@ void handle_connect_to_new_wifi()
   }
 }
 
+void handle_sync_sensor()
+{
+  if (server.method() == HTTP_GET)
+  {
+    Serial.println("\nWaiting for user to press SYNC button on sensor...");
+    inSensorSearchingMode = true;
+    selected_sensor_mac_address = "NA";
+    while (inSensorSearchingMode && inAPMode)
+    {
+      BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
+      pBLEScan->clearResults();
+      if (selected_sensor_mac_address != "NA")
+      {
+        server.send(200, "application/json", "{\"status\": 1, \"sync_mac\": \"" + selected_sensor_mac_address + "\"}");
+        Serial.println("SYNCed sensor mac sent to the app");
+        inSensorSearchingMode = false;
+        break;
+      }
+    }
+  }
+}
+
+void handle_confirm_synced_sensor()
+{
+  if (server.method() == HTTP_GET)
+  {
+    if (selected_sensor_mac_address != "NA")
+    {
+      Serial.println("Confirmed synced sensor. Writing to EEPROM...");
+      bluetooth_sending_status = false;
+      EEPROM.begin(EEPROM_SIZE);
+      for (int i = SENSOR_MAC_ADDR; i < SENSOR_MAC_ADDR + 50; i++)
+        EEPROM.write(i, 0);
+      for (int i = 0; i < selected_sensor_mac_address.length(); i++)
+        EEPROM.write(SENSOR_MAC_ADDR + i, selected_sensor_mac_address[i]);
+      EEPROM.commit();
+      Serial.println("Saved mac address of the sensor to the EEPROM");
+      server.send(200, "application/json", "{\"status\": 1, \"confirmed_mac\": \"" + selected_sensor_mac_address + "\"}");
+    }
+  }
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -540,10 +600,12 @@ void setup()
   server.on("/configuration/v1/wifi-config", HTTP_POST, handle_connect_to_new_wifi);
   server.on("/configuration/v1/other-config", HTTP_POST, handle_other_config);
   server.on("/check/v1/check-internet", HTTP_GET, handle_check_internet_connection);
+  server.on("/check/v1/confirm-synced-sensor", HTTP_GET, handle_confirm_synced_sensor);
+  server.on("/check/v1/sync-sensor", HTTP_GET, handle_sync_sensor);
   bluetooth_sending_status = false;
 
   // Try to connect to saved Wi-Fi credentials and load other configuration data
-  if (!tryConnectToSavedWiFi() || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA")
+  if (!tryConnectToSavedWiFi() || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA" || selected_sensor_mac_address == "NA")
   {
     Serial.println("Starting AP mode");
     WiFi.mode(WIFI_AP);
@@ -560,7 +622,7 @@ void setup()
     indicateSuccessfulConnection();
     bluetooth_sending_status = true;
     Serial.println("Data loaded from EEPROM.");
-    Serial.println("Scanning for Gas sensors...");
+    Serial.println("Scanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
   }
 
   server.begin();
