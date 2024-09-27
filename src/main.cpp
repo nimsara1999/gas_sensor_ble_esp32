@@ -42,6 +42,7 @@ const int LATITUDE_ADDR = 250;
 const int LOADED_HEIGHT_ADDR = 300;
 const int EEPROM_SIZE = 512;
 const int httpsPort = 443;
+const int sound_speed = 757;
 const char *ap_ssid = "Gateway";
 const char *ap_password = "123456789";
 const char *serverHost = "elysiumapi.overleap.lk";
@@ -167,9 +168,9 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         std::string frameHead2 = hexAdvData.substr(8, 4);
         std::string measurementHex = hexAdvData.substr(12, 4);
         std::string batteryHex = hexAdvData.substr(16, 2);
-        std::string macAddress = hexAdvData.substr(42, 12);
 
-        int measurement = hex_to_int(measurementHex);
+        float measurement = (hex_to_int(measurementHex)) * sound_speed / 2000;
+
         int battery = hex_to_int(batteryHex);
 
         // Serial.print("Received Payload: ");
@@ -179,9 +180,9 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         unsigned long epochTime = timeClient.getEpochTime();
 
         postData = String("{\"DATETIME\":") + String(epochTime) +
-                   ",\"IMEI\":\"" + String(macAddress.c_str()) + "\"," +
+                   ",\"IMEI\":\"" + String(advertisedDevice.getAddress().toString().c_str()) + "\"," +
                    "\"NCU_FW_VER\":109," +
-                   "\"GAS_METER\":" + String(measurement) + "," +
+                   "\"GAS_METER\":" + String(measurement / 10) + "," +
                    "\"CSQ\":104," +
                    "\"MCU_TEMP\":30," +
                    "\"BAT_VOL\":" + String(battery) + "," +
@@ -191,7 +192,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
                    "\"GAS_PERCENT\":" + String(measurement * 100 / loadedHeight.toFloat()) + "," +
                    "\"LONGITUDE\":\"" + String(longitude) + "\"," +
                    "\"LATITUDE\":\"" + String(latitude) + "\"," +
-                   "\"LOADED_HEIGHT\":\"" + String(loadedHeight.toFloat()) + "\"," +
+                   "\"LOADED_HEIGHT\":" + String(loadedHeight.toFloat()) + "," +
                    "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
 
         // Ensure there's a delay between transmissions
