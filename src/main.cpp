@@ -39,6 +39,7 @@ const int LOADED_HEIGHT_ADDR = 300;
 const int SENSOR_MAC_ADDR = 350;
 const int EEPROM_SIZE = 512;
 const int httpsPort = 443;
+const int sound_speed = 757;
 const char *ap_ssid = "Gateway";
 const char *ap_password = "123456789";
 const char *serverHost = "elysiumapi.overleap.lk";
@@ -164,7 +165,9 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         std::string frameHead2 = hexAdvData.substr(8, 4);
         std::string measurementHex = hexAdvData.substr(12, 4);
         std::string batteryHex = hexAdvData.substr(16, 2);
-        std::string macAddress = hexAdvData.substr(42, 12);
+        std::string macAddress = advertisedDevice.getAddress().toString().c_str();
+
+        float measurement = (hex_to_int(measurementHex)) * sound_speed / 2000;
 
         if (inSensorSearchingMode)
         {
@@ -193,7 +196,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
             postData = String("{\"DATETIME\":") + String(epochTime) +
                        ",\"IMEI\":\"" + String(macAddress.c_str()) + "\"," +
                        "\"NCU_FW_VER\":109," +
-                       "\"GAS_METER\":" + String(measurement) + "," +
+                       "\"GAS_METER\":" + String(measurement / 10) + "," +
                        "\"CSQ\":104," +
                        "\"MCU_TEMP\":30," +
                        "\"BAT_VOL\":" + String(battery) + "," +
