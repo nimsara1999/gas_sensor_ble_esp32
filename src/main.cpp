@@ -19,6 +19,8 @@ bool inSensorSearchingMode = false;
 unsigned long previousMillis = 0;
 const long blink_interval = 500;
 int led_state = 0;
+int number_of_failed_attempts_to_connect_to_server = 0;
+int max_number_of_failed_attempts = 5;
 
 String tankSize = "NA";
 String timeZone = "NA";
@@ -124,6 +126,7 @@ void sendDataToServer(void *param)
       {
         Serial.println("Data sent successfully");
         indicateSuccessfulDataSendToServer();
+        number_of_failed_attempts_to_connect_to_server = 0;
         break;
       }
     }
@@ -132,6 +135,13 @@ void sendDataToServer(void *param)
   else
   {
     Serial.println("Connection to server failed");
+    number_of_failed_attempts_to_connect_to_server++;
+    Serial.println("Number of failed attempts: " + String(number_of_failed_attempts_to_connect_to_server));
+    if (number_of_failed_attempts_to_connect_to_server > max_number_of_failed_attempts)
+    {
+      Serial.println("Restarting ESP");
+      ESP.restart();
+    }
   }
 
   vTaskDelete(NULL); // Delete the task once the HTTPS request is done
