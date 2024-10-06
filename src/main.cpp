@@ -16,7 +16,6 @@
 bool inAPMode = false;
 bool bluetooth_sending_status = false;
 bool inSensorSearchingMode = false;
-bool started_apmode_by_button = false;
 unsigned long previousMillis = 0;
 const long blink_interval = 500;
 int led_state = 0;
@@ -62,7 +61,6 @@ String postData;
 
 void indicateSuccessfulConnection();
 void indicateSuccessfulDataSendToServer();
-bool tryConnectToSavedWiFi(int retry_delay);
 
 std::string string_to_hex(const std::string &input)
 {
@@ -101,7 +99,7 @@ void sendDataToServer(void *param)
   if (client.connect(serverHost, httpsPort))
   {
     Serial.println("****************************************************************************************************");
-    Serial.println("Connected to server. Sending data...");
+    Serial.println("Connected to server. Sending data... ");
     Serial.println("JSON Data:");
     Serial.println(postData);
 
@@ -255,9 +253,6 @@ void blinkLEDInAPMode()
     previousMillis = currentMillis;
     led_state = !led_state;
     digitalWrite(BUILTIN_LED, led_state);
-    if (!started_apmode_by_button){
-      inAPMode = !tryConnectToSavedWiFi(200);
-    }
   }
 }
 
@@ -268,7 +263,6 @@ void handleButtonPress()
     delay(100);
     if (digitalRead(BOOT_PIN) == LOW)
     {
-      started_apmode_by_button = true;
       switchToAPMode();
     }
   }
@@ -368,7 +362,7 @@ void loadWiFiCredentials(String &ssid, String &password)
   Serial.println("Loaded other configuration data from EEPROM");
 }
 
-bool tryConnectToSavedWiFi(int retry_delay)
+bool tryConnectToSavedWiFi()
 {
   String savedSSID, savedPassword;
   loadWiFiCredentials(savedSSID, savedPassword);
@@ -385,7 +379,7 @@ bool tryConnectToSavedWiFi(int retry_delay)
 
     while (WiFi.status() != WL_CONNECTED && retries < maxRetries)
     {
-      delay(retry_delay);
+      delay(1000);
       Serial.print(".");
       retries++;
     }
@@ -624,7 +618,7 @@ void setup()
   bluetooth_sending_status = false;
 
   // Try to connect to saved Wi-Fi credentials and load other configuration data
-  if (!tryConnectToSavedWiFi(1000) || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA" || selected_sensor_mac_address == "NA")
+  if (!tryConnectToSavedWiFi() || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA" || selected_sensor_mac_address == "NA")
   {
     Serial.println("Starting AP mode");
     WiFi.mode(WIFI_AP);
@@ -633,7 +627,6 @@ void setup()
     Serial.print("AP IP Address: ");
     Serial.println(WiFi.softAPIP());
     inAPMode = true;
-    started_apmode_by_button = false;
   }
   else
   {
@@ -674,4 +667,3 @@ void loop()
     pBLEScan->clearResults();
   }
 }
-
