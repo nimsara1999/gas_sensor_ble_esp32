@@ -177,8 +177,6 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         std::string batteryHex = hexAdvData.substr(16, 2);
         std::string macAddress = advertisedDevice.getAddress().toString().c_str();
 
-        float measurement = (hex_to_int(measurementHex)) * sound_speed / 2000;
-
         if (inSensorSearchingMode)
         {
           if (type == "21")
@@ -194,7 +192,8 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         {
           if (strcmp(macAddress.c_str(), selected_sensor_mac_address.c_str()) == 0)
           {
-            int measurement = hex_to_int(measurementHex);
+            float measurement = (hex_to_int(measurementHex)) * sound_speed / 2000;
+
             int battery = hex_to_int(batteryHex);
 
             // Serial.print("Received Payload: ");
@@ -204,7 +203,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
             unsigned long epochTime = timeClient.getEpochTime();
 
             postData = String("{\"DATETIME\":") + String(epochTime) +
-                       ",\"IMEI\":\"" + String(macAddress.c_str()) + "\"," +
+                       ",\"IMEI\":\"" + String(advertisedDevice.getAddress().toString().c_str()) + "\"," +
                        "\"NCU_FW_VER\":109," +
                        "\"GAS_METER\":" + String(measurement / 10) + "," +
                        "\"CSQ\":104," +
@@ -216,7 +215,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
                        "\"GAS_PERCENT\":" + String(measurement * 100 / loadedHeight.toFloat()) + "," +
                        "\"LONGITUDE\":\"" + String(longitude) + "\"," +
                        "\"LATITUDE\":\"" + String(latitude) + "\"," +
-                       "\"LOADED_HEIGHT\":\"" + String(loadedHeight.toFloat()) + "\"," +
+                       "\"LOADED_HEIGHT\":" + String(loadedHeight.toFloat()) + "," +
                        "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
 
             // Ensure there's a delay between transmissions
