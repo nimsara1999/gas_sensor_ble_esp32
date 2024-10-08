@@ -510,19 +510,18 @@ void handle_connect_to_new_wifi()
     Serial.println("\nReceiving Wi-Fi credentials...");
     Serial.print("Received SSID: ");
     Serial.println(ssid);
-    Serial.println("Received Password");
 
     Serial.print("Trying to connect to the new Wi-Fi network");
 
     WiFi.mode(WIFI_AP_STA); // Set mode to both AP and STA
     WiFi.begin(ssid.c_str(), password.c_str());
 
-    int maxRetries = 20;
+    int maxRetries = 10;
     int retries = 0;
 
     while (WiFi.status() != WL_CONNECTED && retries < maxRetries)
     {
-      delay(500);
+      delay(1000);
       Serial.print(".");
       retries++;
     }
