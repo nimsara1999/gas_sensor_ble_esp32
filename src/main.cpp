@@ -30,7 +30,7 @@ String loadedHeight = "NA";
 String selected_sensor_mac_address = "NA";
 
 const int scanTimeSeconds = 1;
-const int BOOT_PIN = 9;
+const int BOOT_PIN = 0;
 const int SSID_ADDR = 0;
 const int PASS_ADDR = 50;
 const int TANKSIZE_ADDR = 100;
