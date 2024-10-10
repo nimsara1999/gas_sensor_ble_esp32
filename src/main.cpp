@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ArduinoJson.h>
 #include <EEPROM.h>
 #include <HTTPClient.h>
 #include <BLEDevice.h>
@@ -97,6 +98,11 @@ void sendDataToServer(void *param)
 {
   if (client.connect(serverHost, httpsPort))
   {
+    Serial.println("****************************************************************************************************");
+    Serial.println("Connected to server. Sending data... ");
+    Serial.println("JSON Data:");
+    Serial.println(postData);
+
     client.println(String("POST ") + apiPath + " HTTP/1.1");
     client.println(String("Host: ") + serverHost);
     client.println("Content-Type: application/json");
@@ -114,6 +120,8 @@ void sendDataToServer(void *param)
     {
       String response = client.readString();
       responseCode = response.substring(9, 12).toInt();
+      Serial.print("Server responseCode: ");
+      Serial.println(responseCode);
       if (responseCode == 200)
       {
         Serial.println("Data sent successfully");
@@ -126,11 +134,12 @@ void sendDataToServer(void *param)
   }
   else
   {
+    Serial.println("Connection to server failed");
     number_of_failed_attempts_to_connect_to_server++;
-    Serial.println("Failed to connect to server");
+    Serial.println("Number of failed attempts: " + String(number_of_failed_attempts_to_connect_to_server));
     if (number_of_failed_attempts_to_connect_to_server > max_number_of_failed_attempts)
     {
-      Serial.println("Max number of failed attempts reached. Restarting the device");
+      Serial.println("Restarting ESP");
       ESP.restart();
     }
   }
@@ -172,8 +181,11 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         {
           if (type == "21")
           {
+            Serial.println("\nFound a SYNCed sensor");
             inSensorSearchingMode = false;
             selected_sensor_mac_address = macAddress.c_str();
+            Serial.print("MAC Address: ");
+            Serial.println(selected_sensor_mac_address);
           }
         }
         else
@@ -183,6 +195,9 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
             float measurement = (hex_to_int(measurementHex)) * sound_speed / 2000;
 
             int battery = hex_to_int(batteryHex);
+
+            // Serial.print("Received Payload: ");
+            // Serial.println(hexAdvData.c_str());
 
             timeClient.update();
             unsigned long epochTime = timeClient.getEpochTime();
@@ -218,10 +233,15 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 
 void switchToAPMode()
 {
+  Serial.println("\n\n****************************************************************************************************\n****************************************************************************************************");
+  Serial.println("\nSwitching to AP mode...");
   bluetooth_sending_status = false;
   WiFi.mode(WIFI_AP);
   inAPMode = true;
   WiFi.softAP(ap_ssid, ap_password);
+  Serial.println("\nAccess Point Started");
+  Serial.print("AP IP Address: ");
+  Serial.println(WiFi.softAPIP());
 }
 
 void blinkLEDInAPMode()
@@ -249,7 +269,7 @@ void handleButtonPress()
 
 void saveWiFiCredentials(const String &ssid, const String &password)
 {
-  // EEPROM.begin(EEPROM_SIZE);
+  EEPROM.begin(EEPROM_SIZE);
 
   for (int i = SSID_ADDR; i < SSID_ADDR + 50; i++)
     EEPROM.write(i, 0);
@@ -260,13 +280,14 @@ void saveWiFiCredentials(const String &ssid, const String &password)
     EEPROM.write(SSID_ADDR + i, ssid[i]);
   for (int i = 0; i < password.length(); i++)
     EEPROM.write(PASS_ADDR + i, password[i]);
+  Serial.println("Saved Wi-Fi credentials to EEPROM");
 
   EEPROM.commit();
 }
 
 void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone, const String &longitude, const String &latitude, const String &loadedHeight)
 {
-  // EEPROM.begin(EEPROM_SIZE);
+  EEPROM.begin(EEPROM_SIZE);
 
   for (int i = TANKSIZE_ADDR; i < TANKSIZE_ADDR + 50; i++)
     EEPROM.write(i, 0);
@@ -291,11 +312,12 @@ void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone,
     EEPROM.write(LOADED_HEIGHT_ADDR + i, loadedHeight[i]);
 
   EEPROM.commit();
+  Serial.println("Saved other configuration data to EEPROM");
 }
 
 void loadWiFiCredentials(String &ssid, String &password)
 {
-  // EEPROM.begin(EEPROM_SIZE);
+  EEPROM.begin(EEPROM_SIZE);
 
   char ssidBuff[50];
   char passBuff[50];
@@ -307,6 +329,7 @@ void loadWiFiCredentials(String &ssid, String &password)
 
   ssid = String(ssidBuff);
   password = String(passBuff);
+  Serial.println("Loaded Wi-Fi credentials from EEPROM");
 
   char tankSizeBuff[50];
   char timeZoneBuff[50];
@@ -334,6 +357,8 @@ void loadWiFiCredentials(String &ssid, String &password)
   latitude = String(latitudeBuff);
   loadedHeight = String(loadedHeightBuff);
   selected_sensor_mac_address = String(selectedSensorMacBuff);
+
+  Serial.println("Loaded other configuration data from EEPROM");
 }
 
 bool tryConnectToSavedWiFi()
@@ -343,6 +368,9 @@ bool tryConnectToSavedWiFi()
 
   if (savedSSID.length() > 0 && savedPassword.length() > 0)
   {
+    Serial.print("Trying to connect to saved SSID: ");
+    Serial.print(savedSSID);
+
     WiFi.begin(savedSSID.c_str(), savedPassword.c_str());
 
     int maxRetries = 10;
@@ -351,13 +379,15 @@ bool tryConnectToSavedWiFi()
     while (WiFi.status() != WL_CONNECTED && retries < maxRetries)
     {
       delay(1000);
+      Serial.print(".");
       retries++;
     }
 
     if (WiFi.status() == WL_CONNECTED)
     {
-      Serial.print("Connected to saved WiFi of SSID : ");
-      Serial.println(savedSSID);
+      Serial.println("\nSuccessfully connected to saved Wi-Fi");
+      Serial.print("IP Address: ");
+      Serial.println(WiFi.localIP());
       return true;
     }
   }
@@ -366,16 +396,20 @@ bool tryConnectToSavedWiFi()
 
 void handle_check_internet_connection()
 {
+  Serial.println("\nChecking Internet connection...");
   if (server.method() == HTTP_GET)
   {
     if (WiFi.status() == WL_CONNECTED)
     {
       if (client.connect("www.google.com", 443))
       {
+        Serial.println("Connected to the Internet");
+        Serial.println("Restart the gateway to start sending data to the server");
         server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
       }
       else
       {
+        Serial.println("No Internet access");
         server.send(200, "application/json", "{\"internet_connected\": 0, \"wifi_connected\": 1}");
       }
 
@@ -383,6 +417,7 @@ void handle_check_internet_connection()
     }
     else
     {
+      Serial.println("Not connected to Wi-Fi");
       server.send(200, "application/json", "{\"internet_connected\": 0, \"wifi_connected\": 0}");
     }
   }
@@ -410,12 +445,16 @@ void handle_other_config()
 {
   if (server.method() == HTTP_POST && server.uri() == "/configuration/v1/other-config")
   {
+    Serial.println("\nReceiving other configuration data");
+
     JsonDocument doc;
     String requestBody = server.arg("plain");
     DeserializationError error = deserializeJson(doc, requestBody);
 
     if (error)
     {
+      Serial.print("JSON parse error: ");
+      Serial.println(error.c_str());
       server.send(400, "text/plain", "Invalid JSON");
       return;
     }
@@ -426,9 +465,21 @@ void handle_other_config()
     latitude = doc["latitude"].as<String>();
     loadedHeight = doc["loadedHeight"].as<String>();
 
+    Serial.print("Received TankSize: ");
+    Serial.print(tankSize);
+    Serial.print("\tTimeZone: ");
+    Serial.print(timeZone);
+    Serial.print("\tLongitude: ");
+    Serial.print(longitude);
+    Serial.print("\tLatitude: ");
+    Serial.println(latitude);
+    Serial.print("\tLoaded Height: ");
+    Serial.println(loadedHeight);
+
     server.send(200, "application/json", "{\"status\": 1}");
 
     saveOtherConfigDataToEEPROM(tankSize, timeZone, longitude, latitude, loadedHeight);
+    Serial.println("Restart the gateway to start sending data to the server");
   }
   else
   {
@@ -447,12 +498,20 @@ void handle_connect_to_new_wifi()
 
     if (error)
     {
+      Serial.print("JSON parse error: ");
+      Serial.println(error.c_str());
       server.send(400, "text/plain", "Invalid JSON");
       return;
     }
 
     String ssid = doc["ssid"].as<String>();
     String password = doc["password"].as<String>();
+
+    Serial.println("\nReceiving Wi-Fi credentials...");
+    Serial.print("Received SSID: ");
+    Serial.println(ssid);
+
+    Serial.print("Trying to connect to the new Wi-Fi network");
 
     WiFi.mode(WIFI_AP_STA); // Set mode to both AP and STA
     WiFi.begin(ssid.c_str(), password.c_str());
@@ -463,27 +522,32 @@ void handle_connect_to_new_wifi()
     while (WiFi.status() != WL_CONNECTED && retries < maxRetries)
     {
       delay(1000);
+      Serial.print(".");
       retries++;
     }
 
     if (WiFi.status() == WL_CONNECTED)
     {
+      Serial.println("\nSuccessfully connected to Wi-Fi");
       server.send(200, "application/json", "{\"status\": 1, \"ssid\": \"" + ssid + "\"}");
 
       delay(1000);
 
       saveWiFiCredentials(ssid, password);
-
-      Serial.print("Connected to new WiFi of SSID : ");
-      Serial.println(ssid);
+      Serial.print("Wi-Fi client IP Address: ");
+      Serial.println(WiFi.localIP());
+      Serial.print("Wi-Fi server (AP) IP Address: ");
+      Serial.println(WiFi.softAPIP());
 
       indicateSuccessfulConnection();
     }
     else
     {
+      Serial.println("\nFailed to connect to Wi-Fi");
       server.send(200, "application/json", "{\"status\": 0, \"ssid\": \"" + ssid + "\"}");
       WiFi.mode(WIFI_AP);
       WiFi.softAP(ap_ssid, ap_password);
+      Serial.println("Re-enabled AP mode");
     }
   }
   else
@@ -496,6 +560,7 @@ void handle_sync_sensor()
 {
   if (server.method() == HTTP_GET)
   {
+    Serial.println("\nWaiting for user to press SYNC button on sensor...");
     inSensorSearchingMode = true;
     selected_sensor_mac_address = "NA";
     while (inSensorSearchingMode && inAPMode)
@@ -505,6 +570,7 @@ void handle_sync_sensor()
       if (selected_sensor_mac_address != "NA")
       {
         server.send(200, "application/json", "{\"status\": 1, \"sync_mac\": \"" + selected_sensor_mac_address + "\"}");
+        Serial.println("SYNCed sensor mac sent to the app");
         inSensorSearchingMode = false;
         break;
       }
@@ -518,13 +584,15 @@ void handle_confirm_synced_sensor()
   {
     if (selected_sensor_mac_address != "NA")
     {
+      Serial.println("Confirmed synced sensor. Writing to EEPROM...");
       bluetooth_sending_status = false;
-      // EEPROM.begin(EEPROM_SIZE);
+      EEPROM.begin(EEPROM_SIZE);
       for (int i = SENSOR_MAC_ADDR; i < SENSOR_MAC_ADDR + 50; i++)
         EEPROM.write(i, 0);
       for (int i = 0; i < selected_sensor_mac_address.length(); i++)
         EEPROM.write(SENSOR_MAC_ADDR + i, selected_sensor_mac_address[i]);
       EEPROM.commit();
+      Serial.println("Saved mac address of the sensor to the EEPROM");
       server.send(200, "application/json", "{\"status\": 1, \"confirmed_mac\": \"" + selected_sensor_mac_address + "\"}");
     }
   }
@@ -533,6 +601,7 @@ void handle_confirm_synced_sensor()
 void setup()
 {
   Serial.begin(115200);
+
   EEPROM.begin(EEPROM_SIZE);
 
   pinMode(BOOT_PIN, INPUT_PULLUP);
@@ -549,8 +618,12 @@ void setup()
   // Try to connect to saved Wi-Fi credentials and load other configuration data
   if (!tryConnectToSavedWiFi() || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA" || selected_sensor_mac_address == "NA")
   {
+    Serial.println("Starting AP mode");
     WiFi.mode(WIFI_AP);
     WiFi.softAP(ap_ssid, ap_password);
+    Serial.println("Access Point Started");
+    Serial.print("AP IP Address: ");
+    Serial.println(WiFi.softAPIP());
     inAPMode = true;
   }
   else
@@ -559,6 +632,8 @@ void setup()
     WiFi.mode(WIFI_STA);
     indicateSuccessfulConnection();
     bluetooth_sending_status = true;
+    Serial.println("Data loaded from EEPROM.");
+    Serial.println("Scanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
   }
 
   server.begin();
