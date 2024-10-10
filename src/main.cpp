@@ -116,6 +116,7 @@ void sendDataToServer(void *param)
       responseCode = response.substring(9, 12).toInt();
       if (responseCode == 200)
       {
+        Serial.println("Data sent successfully");
         indicateSuccessfulDataSendToServer();
         number_of_failed_attempts_to_connect_to_server = 0;
         break;
@@ -126,8 +127,10 @@ void sendDataToServer(void *param)
   else
   {
     number_of_failed_attempts_to_connect_to_server++;
+    Serial.println("Failed to connect to server");
     if (number_of_failed_attempts_to_connect_to_server > max_number_of_failed_attempts)
     {
+      Serial.println("Max number of failed attempts reached. Restarting the device");
       ESP.restart();
     }
   }
@@ -353,6 +356,8 @@ bool tryConnectToSavedWiFi()
 
     if (WiFi.status() == WL_CONNECTED)
     {
+      Serial.print("Connected to saved WiFi of SSID : ");
+      Serial.println(savedSSID);
       return true;
     }
   }
@@ -469,6 +474,9 @@ void handle_connect_to_new_wifi()
 
       saveWiFiCredentials(ssid, password);
 
+      Serial.print("Connected to new WiFi of SSID : ");
+      Serial.println(ssid);
+
       indicateSuccessfulConnection();
     }
     else
@@ -524,6 +532,7 @@ void handle_confirm_synced_sensor()
 
 void setup()
 {
+  Serial.begin(115200);
   EEPROM.begin(EEPROM_SIZE);
 
   pinMode(BOOT_PIN, INPUT_PULLUP);
