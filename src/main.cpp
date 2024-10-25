@@ -126,6 +126,8 @@ int hex_to_int(const std::string &hexString)
 
 void sendDataToServer(void *param)
 {
+  Serial.println("\n****************************************************************************************************");
+
   Serial.print("Internet connection:");
   if (client.connect("www.google.com", 443))
   {
@@ -135,10 +137,10 @@ void sendDataToServer(void *param)
   {
     Serial.println("FAILED!");
   }
+  client.stop();
 
   if (client.connect(serverHost, httpsPort))
   {
-    Serial.println("****************************************************************************************************");
     Serial.println("Connected to server. Sending data... ");
     Serial.println("JSON Data:");
     Serial.println(postData);
@@ -168,8 +170,6 @@ void sendDataToServer(void *param)
 
     while (client.connected() && (millis() - timeout) < 5000)
     {
-      client.stop();
-
       String response = client.readString();
       responseCode = response.substring(9, 12).toInt();
       Serial.print("Server responseCode: ");
