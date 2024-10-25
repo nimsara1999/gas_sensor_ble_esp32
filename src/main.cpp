@@ -125,6 +125,16 @@ int hex_to_int(const std::string &hexString)
 
 void sendDataToServer(void *param)
 {
+  Serial.print("Internet connection:");
+  if (client.connect("www.google.com", 443))
+  {
+    Serial.println("OK");
+  }
+  else
+  {
+    Serial.println("FAILED!");
+  }
+
   if (client.connect(serverHost, httpsPort))
   {
     Serial.println("****************************************************************************************************");
@@ -145,8 +155,19 @@ void sendDataToServer(void *param)
     int responseCode = -1;
     String responseBody = "";
 
+    int freeHeap = ESP.getFreeHeap();
+    Serial.println("Free heap memory: " + String(freeHeap));
+
+    if (freeHeap < 20000)
+    {
+      Serial.println("Free heap memory is low. Restarting ESP");
+      ESP.restart();
+    }
+
     while (client.connected() && (millis() - timeout) < 5000)
     {
+      client.stop();
+
       String response = client.readString();
       responseCode = response.substring(9, 12).toInt();
       Serial.print("Server responseCode: ");
