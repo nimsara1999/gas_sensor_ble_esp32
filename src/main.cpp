@@ -63,6 +63,7 @@ String postData;
 
 void indicateSuccessfulConnection();
 void indicateSuccessfulDataSendToServer();
+void blinkLEDinErrorPattern(int number_of_blinks);
 
 std::string string_to_hex(const std::string &input)
 {
@@ -161,6 +162,7 @@ void sendDataToServer(void *param)
     if (freeHeap < 20000)
     {
       Serial.println("Free heap memory is low. Restarting ESP");
+      blinkLEDinErrorPattern(4); // Blink LED 4 times in error pattern
       ESP.restart();
     }
 
@@ -190,6 +192,7 @@ void sendDataToServer(void *param)
     if (number_of_failed_attempts_to_connect_to_server > max_number_of_failed_attempts)
     {
       Serial.println("Restarting ESP");
+      blinkLEDinErrorPattern(2); // Blink LED 2 times in error pattern
       ESP.restart();
     }
   }
@@ -489,6 +492,21 @@ void indicateSuccessfulConnection()
   digitalWrite(BUILTIN_LED, HIGH); // Turn the LED on
   delay(3000);                     // Keep the LED on for 3 seconds
   digitalWrite(BUILTIN_LED, LOW);  // Turn the LED off
+}
+
+void blinkLEDinErrorPattern(int number_of_blinks)
+{
+  for (int i = 0; i < number_of_blinks; i++)
+  {
+    digitalWrite(BUILTIN_LED, HIGH);
+    delay(30);
+    digitalWrite(BUILTIN_LED, LOW);
+    delay(30);
+    digitalWrite(BUILTIN_LED, HIGH);
+    delay(500);
+    digitalWrite(BUILTIN_LED, LOW);
+    delay(500);
+  }
 }
 
 void handle_other_config()
