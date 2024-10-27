@@ -128,14 +128,13 @@ void sendDataToServer(void *param)
 {
   Serial.println("\n****************************************************************************************************");
 
-  Serial.print("Internet connection:");
   if (client.connect("www.google.com", 443))
   {
-    Serial.println("OK");
+    Serial.println("Internet connection: OK");
   }
   else
   {
-    Serial.println("FAILED!");
+    Serial.println("Internet connection: FAILED!!!!!");
   }
   client.stop();
 
