@@ -18,10 +18,12 @@ bool inAPMode = false;
 bool bluetooth_sending_status = false;
 bool inSensorSearchingMode = false;
 unsigned long previousMillis = 0;
+unsigned long previousMillisForAPMode = 0;
 unsigned long ota_progress_millis = 0;
 int led_state = 0;
 int number_of_failed_attempts_to_connect_to_server = 0;
-int max_number_of_failed_attempts = 5;
+int max_number_of_failed_attempts = 4;
+bool automatically_put_to_AP_mode = false;
 
 String tankSize = "NA";
 String timeZone = "NA";
@@ -44,6 +46,7 @@ const int EEPROM_SIZE = 512;
 const int httpsPort = 443;
 const int sound_speed = 757;
 const long blink_interval = 500;
+const long wifi_search_interval = 120000;
 const char *ap_ssid = "Gateway";
 const char *ap_password = "123456789";
 const char *serverHost = "elysiumapi.overleap.lk";
@@ -64,6 +67,7 @@ String postData;
 void indicateSuccessfulConnection();
 void indicateSuccessfulDataSendToServer();
 void blinkLEDinErrorPattern(int number_of_blinks);
+bool tryConnectToSavedWiFi();
 
 std::string string_to_hex(const std::string &input)
 {
@@ -188,7 +192,7 @@ void sendDataToServer(void *param)
     Serial.println("Connection to server failed");
     number_of_failed_attempts_to_connect_to_server++;
     Serial.println("Number of failed attempts: " + String(number_of_failed_attempts_to_connect_to_server));
-    if (number_of_failed_attempts_to_connect_to_server > max_number_of_failed_attempts)
+    if (number_of_failed_attempts_to_connect_to_server >= max_number_of_failed_attempts)
     {
       Serial.println("Restarting ESP");
       blinkLEDinErrorPattern(2); // Blink LED 2 times in error pattern
@@ -304,6 +308,28 @@ void blinkLEDInAPMode()
     previousMillis = currentMillis;
     led_state = !led_state;
     digitalWrite(BUILTIN_LED, led_state);
+    if (automatically_put_to_AP_mode)
+    {
+      if (currentMillis - previousMillisForAPMode >= wifi_search_interval)
+      {
+        Serial.println("Trying to connect to the last saved Wi-Fi network...");
+        previousMillisForAPMode = currentMillis;
+        if (tryConnectToSavedWiFi())
+        {
+          inAPMode = false;
+          WiFi.mode(WIFI_STA);
+          indicateSuccessfulConnection();
+          bluetooth_sending_status = true;
+          Serial.println("Data loaded from EEPROM.");
+          Serial.println("Scanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
+        }
+        else
+        {
+          Serial.println("Failed to connect to the last saved Wi-Fi network.\nRestarting AP mode...");
+          WiFi.mode(WIFI_AP_STA);
+        }
+      }
+    }
   }
 }
 
@@ -314,6 +340,7 @@ void handleButtonPress()
     delay(100);
     if (digitalRead(BOOT_PIN) == LOW)
     {
+      automatically_put_to_AP_mode = false;
       switchToAPMode();
     }
   }
@@ -415,6 +442,7 @@ void loadWiFiCredentials(String &ssid, String &password)
 
 bool tryConnectToSavedWiFi()
 {
+  WiFi.mode(WIFI_AP_STA);
   String savedSSID, savedPassword;
   loadWiFiCredentials(savedSSID, savedPassword);
 
@@ -440,9 +468,12 @@ bool tryConnectToSavedWiFi()
       Serial.println("\nSuccessfully connected to saved Wi-Fi");
       Serial.print("IP Address: ");
       Serial.println(WiFi.localIP());
+      inAPMode = false;
       return true;
     }
   }
+  Serial.println("Failed to connect to saved Wi-Fi");
+  WiFi.mode(WIFI_AP_STA);
   return false;
 }
 
@@ -688,11 +719,12 @@ void setup()
   if (!tryConnectToSavedWiFi() || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA" || selected_sensor_mac_address == "NA")
   {
     Serial.println("Starting AP mode");
-    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(ap_ssid, ap_password);
     Serial.println("Access Point Started");
     Serial.print("AP IP Address: ");
     Serial.println(WiFi.softAPIP());
+    automatically_put_to_AP_mode = true;
     inAPMode = true;
   }
   else
