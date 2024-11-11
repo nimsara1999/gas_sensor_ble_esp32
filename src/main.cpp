@@ -2,24 +2,22 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
-#include <HTTPClient.h>
+// #include <HTTPClient.h>
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <AsyncTCP.h>
+#include <ESP32httpUpdate.h>
 #include <ArduinoJson.h>
 #include <WiFiClientSecure.h>
-#include <ElegantOTA.h>
 
 bool inAPMode = false;
 bool bluetooth_sending_status = false;
 bool inSensorSearchingMode = false;
 unsigned long previousMillis = 0;
 unsigned long previousMillisForAPMode = 0;
-unsigned long ota_progress_millis = 0;
 int led_state = 0;
 int number_of_failed_attempts_to_connect_to_server = 0;
 int max_number_of_failed_attempts = 4;
@@ -94,33 +92,6 @@ std::string format_hex_string(const std::string &hexString)
     }
   }
   return formattedString;
-}
-
-void onOTAStart()
-{
-  Serial.println("OTA update started!");
-}
-
-void onOTAProgress(size_t current, size_t final)
-{
-  if (millis() - ota_progress_millis > 1000)
-  {
-    ota_progress_millis = millis();
-    Serial.printf("OTA Progress Current: %u bytes, Final: %u bytes\n", current, final);
-  }
-}
-
-void onOTAEnd(bool success)
-{
-  if (success)
-  {
-    Serial.println("OTA update finished successfully!");
-  }
-  else
-  {
-    Serial.println("There was an error during OTA update!");
-  }
-  ESP.restart();
 }
 
 int hex_to_int(const std::string &hexString)
@@ -711,8 +682,8 @@ void setup()
   server.on("/check/v1/check-internet", HTTP_GET, handle_check_internet_connection);
   server.on("/check/v1/confirm-synced-sensor", HTTP_GET, handle_confirm_synced_sensor);
   server.on("/check/v1/sync-sensor", HTTP_GET, handle_sync_sensor);
-  server.on("/", []()
-            { server.send(200, "text/plain", "Hi! This is ElegantOTA Demo."); });
+  server.on("/made-by", []()
+            { server.send(200, "text/plain", "Made by Nimsara & Sasindu."); });
   bluetooth_sending_status = false;
 
   // Try to connect to saved Wi-Fi credentials and load other configuration data
@@ -739,11 +710,6 @@ void setup()
 
   server.begin();
 
-  ElegantOTA.begin(&server);
-  ElegantOTA.onStart(onOTAStart);
-  ElegantOTA.onProgress(onOTAProgress);
-  ElegantOTA.onEnd(onOTAEnd);
-
   client.setInsecure(); // For development purposes, skip certificate validation
 
   timeClient.begin();
@@ -759,7 +725,6 @@ void setup()
 void loop()
 {
   server.handleClient();
-  ElegantOTA.loop();
 
   if (inAPMode)
   {
