@@ -18,9 +18,11 @@ bool bluetooth_sending_status = false;
 bool inSensorSearchingMode = false;
 unsigned long previousMillis = 0;
 unsigned long previousMillisForAPMode = 0;
+unsigned long previousMillisForUpdateCheck = 0;
 int led_state = 0;
 int number_of_failed_attempts_to_connect_to_server = 0;
 int max_number_of_failed_attempts = 4;
+int updateCheckTimer = 0;
 bool automatically_put_to_AP_mode = false;
 
 String tankSize = "NA";
@@ -29,6 +31,8 @@ String longitude = "NA";
 String latitude = "NA";
 String loadedHeight = "NA";
 String selected_sensor_mac_address = "NA";
+String current_fw_version = "1.0.0.1";
+String CHIPID = "123456";
 
 const int scanTimeSeconds = 1;
 const int BOOT_PIN = 0;
@@ -40,11 +44,13 @@ const int LONGITUDE_ADDR = 200;
 const int LATITUDE_ADDR = 250;
 const int LOADED_HEIGHT_ADDR = 300;
 const int SENSOR_MAC_ADDR = 350;
+const int FW_VERSION_ADDR = 400;
 const int EEPROM_SIZE = 512;
 const int httpsPort = 443;
 const int sound_speed = 757;
-const long blink_interval = 500;
-const long wifi_search_interval = 120000;
+const long blink_interval = 500;          // Blink interval in milliseconds
+const long fw_update_interval = 60000;    // Firmware update check interval in milliseconds
+const long wifi_search_interval = 120000; // Wi-Fi search interval in milliseconds
 const char *ap_ssid = "Gateway";
 const char *ap_password = "123456789";
 const char *serverHost = "elysiumapi.overleap.lk";
@@ -66,6 +72,8 @@ void indicateSuccessfulConnection();
 void indicateSuccessfulDataSendToServer();
 void blinkLEDinErrorPattern(int number_of_blinks);
 bool tryConnectToSavedWiFi();
+void doUpdate();
+void check_for_fw_updates();
 
 std::string string_to_hex(const std::string &input)
 {
@@ -231,7 +239,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 
             postData = String("{\"DATETIME\":") + String(epochTime) +
                        ",\"IMEI\":\"" + String(advertisedDevice.getAddress().toString().c_str()) + "\"," +
-                       "\"NCU_FW_VER\":109," +
+                       "\"NCU_FW_VER\":\"" + String(current_fw_version) + "\"," +
                        "\"GAS_METER\":" + String(measurement / 10) + "," +
                        "\"CSQ\":104," +
                        "\"MCU_TEMP\":30," +
@@ -667,6 +675,77 @@ void handle_confirm_synced_sensor()
   }
 }
 
+void check_for_fw_updates()
+{
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillisForUpdateCheck >= fw_update_interval)
+  {
+    previousMillisForUpdateCheck = currentMillis;
+    HTTPClient http;
+    String serverName = "https://raw.githubusercontent.com/nimsara1999/OTAupdate/refs/heads/main/check.txt";
+    http.begin(serverName);
+
+    // Send HTTP GET request
+    int httpResponseCode = http.GET();
+    if (httpResponseCode > 0)
+    {
+      // Serial.print("HTTP Response code: ");
+      // Serial.println(httpResponseCode);
+      String payload = http.getString();
+      payload.trim();
+      Serial.print("Current firmware version: ");
+      Serial.print(current_fw_version);
+      Serial.print("\tLatest firmware version: ");
+      Serial.println(payload);
+      http.end();
+
+      if (payload == current_fw_version)
+      {
+        Serial.println("Firmware update check done. No new updates available");
+        delay(500);
+      }
+      else
+      {
+        Serial.println("Firmware update check done. New updates available. Initiating firmware update in 5 seconds...");
+        delay(5000);
+        doUpdate();
+      }
+    }
+    else
+    {
+      Serial.print("Update check error. Error code: ");
+      Serial.println(httpResponseCode);
+    }
+  }
+}
+
+// updating firmware fetching latest firmware bin file from server
+void doUpdate()
+{
+  Serial.println("Fetching Update...");
+  String url = "https://raw.githubusercontent.com/nimsara1999/OTAupdate/refs/heads/main/firmware.bin";
+  // url += "&s=" + CHIPID;
+  // url += "&v=" + version;
+
+  t_httpUpdate_return ret = ESPhttpUpdate.update(url);
+  switch (ret)
+  {
+  case HTTP_UPDATE_FAILED:
+    Serial.println("Update failed!");
+    break;
+  case HTTP_UPDATE_NO_UPDATES:
+    Serial.println("No new update available");
+    break;
+  // We can't see this, because of reset chip after update OK
+  case HTTP_UPDATE_OK:
+    Serial.println("Update OK");
+    break;
+
+  default:
+    break;
+  }
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -712,6 +791,9 @@ void setup()
 
   client.setInsecure(); // For development purposes, skip certificate validation
 
+  Serial.print("Firmware Version: ");
+  Serial.println(current_fw_version);
+
   timeClient.begin();
 
   BLEDevice::init("");
@@ -720,6 +802,8 @@ void setup()
   pBLEScan->setActiveScan(false);
   pBLEScan->setInterval(100);
   pBLEScan->setWindow(99);
+
+  // check_for_fw_updates();
 }
 
 void loop()
@@ -732,6 +816,7 @@ void loop()
   }
   else
   {
+    check_for_fw_updates();
     handleButtonPress();
     BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
     pBLEScan->clearResults();
