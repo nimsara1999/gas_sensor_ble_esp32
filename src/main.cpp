@@ -31,7 +31,7 @@ String longitude = "NA";
 String latitude = "NA";
 String loadedHeight = "NA";
 String selected_sensor_mac_address = "NA";
-String current_fw_version = "1.0.0.1";
+String current_fw_version = "NA";
 String CHIPID = "123456";
 
 const int scanTimeSeconds = 1;
@@ -72,7 +72,7 @@ void indicateSuccessfulConnection();
 void indicateSuccessfulDataSendToServer();
 void blinkLEDinErrorPattern(int number_of_blinks);
 bool tryConnectToSavedWiFi();
-void doUpdate();
+void doUpdate(const String &new_fw_version, const String &old_fw_version);
 void check_for_fw_updates();
 
 std::string string_to_hex(const std::string &input)
@@ -343,6 +343,20 @@ void saveWiFiCredentials(const String &ssid, const String &password)
   EEPROM.commit();
 }
 
+void saveFwVersion(const String &fw_version)
+{
+  EEPROM.begin(EEPROM_SIZE);
+
+  for (int i = FW_VERSION_ADDR; i < FW_VERSION_ADDR + 50; i++)
+    EEPROM.write(i, 0);
+
+  for (int i = 0; i < fw_version.length(); i++)
+    EEPROM.write(FW_VERSION_ADDR + i, fw_version[i]);
+  Serial.println("Saved FW Version to EEPROM");
+
+  EEPROM.commit();
+}
+
 void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone, const String &longitude, const String &latitude, const String &loadedHeight)
 {
   EEPROM.begin(EEPROM_SIZE);
@@ -395,6 +409,7 @@ void loadWiFiCredentials(String &ssid, String &password)
   char latitudeBuff[50];
   char loadedHeightBuff[50];
   char selectedSensorMacBuff[50];
+  char fwVersionBuff[50];
 
   for (int i = 0; i < 50; i++)
     tankSizeBuff[i] = EEPROM.read(TANKSIZE_ADDR + i);
@@ -408,6 +423,8 @@ void loadWiFiCredentials(String &ssid, String &password)
     loadedHeightBuff[i] = EEPROM.read(LOADED_HEIGHT_ADDR + i);
   for (int i = 0; i < 50; i++)
     selectedSensorMacBuff[i] = EEPROM.read(SENSOR_MAC_ADDR + i);
+  for (int i = 0; i < 50; i++)
+    fwVersionBuff[i] = EEPROM.read(FW_VERSION_ADDR + i);
 
   tankSize = String(tankSizeBuff);
   timeZone = String(timeZoneBuff);
@@ -415,6 +432,7 @@ void loadWiFiCredentials(String &ssid, String &password)
   latitude = String(latitudeBuff);
   loadedHeight = String(loadedHeightBuff);
   selected_sensor_mac_address = String(selectedSensorMacBuff);
+  current_fw_version = String(fwVersionBuff);
 
   Serial.println("Loaded other configuration data from EEPROM");
 }
@@ -675,10 +693,10 @@ void handle_confirm_synced_sensor()
   }
 }
 
-void check_for_fw_updates()
+void check_for_fw_updates(int interval)
 {
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillisForUpdateCheck >= fw_update_interval)
+  if (currentMillis - previousMillisForUpdateCheck >= interval)
   {
     previousMillisForUpdateCheck = currentMillis;
     HTTPClient http;
@@ -708,7 +726,7 @@ void check_for_fw_updates()
       {
         Serial.println("Firmware update check done. New updates available. Initiating firmware update in 5 seconds...");
         delay(5000);
-        doUpdate();
+        doUpdate(payload, current_fw_version);
       }
     }
     else
@@ -720,21 +738,26 @@ void check_for_fw_updates()
 }
 
 // updating firmware fetching latest firmware bin file from server
-void doUpdate()
+void doUpdate(const String &new_fw_version, const String &old_fw_version)
 {
   Serial.println("Fetching Update...");
   String url = "https://raw.githubusercontent.com/nimsara1999/OTAupdate/refs/heads/main/firmware.bin";
   // url += "&s=" + CHIPID;
   // url += "&v=" + version;
 
+  saveFwVersion(new_fw_version);
+
   t_httpUpdate_return ret = ESPhttpUpdate.update(url);
+
   switch (ret)
   {
   case HTTP_UPDATE_FAILED:
     Serial.println("Update failed!");
+    saveFwVersion(old_fw_version);
     break;
   case HTTP_UPDATE_NO_UPDATES:
     Serial.println("No new update available");
+    saveFwVersion(old_fw_version);
     break;
   // We can't see this, because of reset chip after update OK
   case HTTP_UPDATE_OK:
@@ -793,6 +816,7 @@ void setup()
 
   Serial.print("Firmware Version: ");
   Serial.println(current_fw_version);
+  check_for_fw_updates(0);
 
   timeClient.begin();
 
@@ -802,8 +826,6 @@ void setup()
   pBLEScan->setActiveScan(false);
   pBLEScan->setInterval(100);
   pBLEScan->setWindow(99);
-
-  // check_for_fw_updates();
 }
 
 void loop()
@@ -816,7 +838,7 @@ void loop()
   }
   else
   {
-    check_for_fw_updates();
+    check_for_fw_updates(fw_update_interval);
     handleButtonPress();
     BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
     pBLEScan->clearResults();
