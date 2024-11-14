@@ -1,3 +1,5 @@
+// Firmware version: 1.0.4
+
 #include <WiFi.h>
 #include <WebServer.h>
 #include <ArduinoJson.h>
