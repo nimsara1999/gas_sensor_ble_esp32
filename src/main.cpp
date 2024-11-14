@@ -786,8 +786,6 @@ void setup()
   server.on("/check/v1/check-internet", HTTP_GET, handle_check_internet_connection);
   server.on("/check/v1/confirm-synced-sensor", HTTP_GET, handle_confirm_synced_sensor);
   server.on("/check/v1/sync-sensor", HTTP_GET, handle_sync_sensor);
-  server.on("/made-by", []()
-            { server.send(200, "text/plain", "Made by Nimsara & Sasindu."); });
   bluetooth_sending_status = false;
 
   // Try to connect to saved Wi-Fi credentials and load other configuration data
