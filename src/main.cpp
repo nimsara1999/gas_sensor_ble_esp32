@@ -75,7 +75,7 @@ void indicateSuccessfulDataSendToServer();
 void blinkLEDinErrorPattern(int number_of_blinks);
 bool tryConnectToSavedWiFi();
 void doUpdate(const String &new_fw_version, const String &old_fw_version);
-void check_for_fw_updates();
+void check_for_fw_updates(int interval);
 
 std::string string_to_hex(const std::string &input)
 {
@@ -700,6 +700,21 @@ void check_for_fw_updates(int interval)
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillisForUpdateCheck >= interval)
   {
+
+    Serial.println("\n******************FW UPDATE CHECK******************");
+
+    if (client.connect("www.google.com", 443))
+    {
+      Serial.println("Internet connection: OK");
+      client.stop();
+    }
+    else
+    {
+      Serial.println("Internet connection: FAILED!\nUpdate check failed");
+      client.stop();
+      return;
+    }
+
     previousMillisForUpdateCheck = currentMillis;
     HTTPClient http;
     String serverName = "https://raw.githubusercontent.com/nimsara1999/OTAupdate/refs/heads/main/check.txt";
@@ -775,6 +790,8 @@ void setup()
 {
   Serial.begin(115200);
 
+  Serial.println("\n\nStarting Gateway...\n\n");
+
   EEPROM.begin(EEPROM_SIZE);
 
   pinMode(BOOT_PIN, INPUT_PULLUP);
@@ -786,6 +803,9 @@ void setup()
   server.on("/check/v1/check-internet", HTTP_GET, handle_check_internet_connection);
   server.on("/check/v1/confirm-synced-sensor", HTTP_GET, handle_confirm_synced_sensor);
   server.on("/check/v1/sync-sensor", HTTP_GET, handle_sync_sensor);
+  server.on("/made-by", []()
+            { server.send(200, "text/plain", "Made by Nimsara & Sasindu."); });
+
   bluetooth_sending_status = false;
 
   // Try to connect to saved Wi-Fi credentials and load other configuration data
