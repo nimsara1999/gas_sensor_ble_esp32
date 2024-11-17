@@ -1,4 +1,4 @@
-// Firmware version: 1.0.4
+// Firmware version: 1.0.6
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -856,6 +856,27 @@ void doUpdate(const String &new_fw_version, const String &old_fw_version)
   }
 }
 
+bool isValidString(String data, size_t maxLength)
+{
+  if (data.isEmpty())
+  {
+    return false;
+  }
+  if (data.length() == 0 || data.length() > maxLength)
+  {
+    return false;
+  }
+  for (size_t i = 0; i < data.length(); i++)
+  {
+    char c = data.charAt(i);
+    if (c < 32 || c > 126)
+    {
+      return false; // Invalid character found
+    }
+  }
+  return true; // String is valid
+}
+
 void setup()
 {
   Serial.begin(115200);
@@ -902,13 +923,29 @@ void setup()
     inAPMode = false;
     WiFi.mode(WIFI_STA);
     indicateSuccessfulConnection();
-    bluetooth_sending_status = true;
-    Serial.println("Data loaded from EEPROM.");
-    Serial.print("Firmware Version: ");
-    Serial.println(current_fw_version);
-    check_for_fw_updates(0);
-    indicateReadyToReceiveData();
-    Serial.println("\nScanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
+    if (isValidString(timeZone, 50) && isValidString(tankSize, 50) && isValidString(longitude, 50) && isValidString(latitude, 50) && isValidString(loadedHeight, 50))
+    {
+      bluetooth_sending_status = true;
+      Serial.println("Data loaded from EEPROM.");
+      Serial.print("Firmware Version: ");
+      Serial.println(current_fw_version);
+      check_for_fw_updates(0);
+      indicateReadyToReceiveData();
+      Serial.println("\nScanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
+    }
+    else
+    {
+      Serial.println("Invalid data loaded from EEPROM. Restarting the gateway");
+      while (1)
+      {
+        delay(100);
+        blinkRGBLedInPattern(1, LED_brightness, 0, 0, 100, 200); // blink red LED short pulses
+        if (handleButtonPress())
+        {
+          break;
+        }
+      }
+    }
   }
 
   server.begin();
