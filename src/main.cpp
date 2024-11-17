@@ -4,7 +4,6 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <EEPROM.h>
-// #include <HTTPClient.h>
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEScan.h>
@@ -177,12 +176,12 @@ void sendDataToServer(void *param)
     if (number_of_failed_attempts_to_connect_to_server >= max_number_of_failed_attempts)
     {
       Serial.println("Restarting ESP");
-      blinkLEDinErrorPattern(2); // Blink LED 2 times in error pattern
+      blinkLEDinErrorPattern(2);
       ESP.restart();
     }
   }
 
-  vTaskDelete(NULL); // Delete the task once the HTTPS request is done
+  vTaskDelete(NULL);
 }
 
 void createHTTPSTask()
@@ -256,7 +255,6 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
                        "\"LOADED_HEIGHT\":" + String(loadedHeight.toFloat()) + "," +
                        "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
 
-            // Ensure there's a delay between transmissions
             if (millis() - lastSendTime > 5000)
             {
               createHTTPSTask();
@@ -538,9 +536,9 @@ void indicateSuccessfulDataSendToServer()
 
 void indicateSuccessfulConnection()
 {
-  digitalWrite(BUILTIN_LED, HIGH); // Turn the LED on
-  delay(3000);                     // Keep the LED on for 3 seconds
-  digitalWrite(BUILTIN_LED, LOW);  // Turn the LED off
+  digitalWrite(BUILTIN_LED, HIGH);
+  delay(3000);
+  digitalWrite(BUILTIN_LED, LOW);
 }
 
 void blinkLEDinErrorPattern(int number_of_blinks)
@@ -630,7 +628,7 @@ void handle_connect_to_new_wifi()
 
     Serial.print("Trying to connect to the new Wi-Fi network");
 
-    WiFi.mode(WIFI_AP_STA); // Set mode to both AP and STA
+    WiFi.mode(WIFI_AP_STA);
     WiFi.begin(ssid.c_str(), password.c_str());
 
     int maxRetries = 10;
@@ -744,8 +742,6 @@ void check_for_fw_updates(int interval)
     int httpResponseCode = http.GET();
     if (httpResponseCode > 0)
     {
-      // Serial.print("HTTP Response code: ");
-      // Serial.println(httpResponseCode);
       String payload = http.getString();
       payload.trim();
       Serial.print("Current firmware version: ");
@@ -779,8 +775,6 @@ void doUpdate(const String &new_fw_version, const String &old_fw_version)
 {
   Serial.println("Fetching Update...");
   String url = "https://raw.githubusercontent.com/nimsara1999/OTAupdate/refs/heads/main/firmware.bin";
-  // url += "&s=" + CHIPID;
-  // url += "&v=" + version;
 
   saveFwVersion(new_fw_version);
 
