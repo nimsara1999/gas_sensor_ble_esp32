@@ -1,4 +1,4 @@
-// Firmware version: 1.0.6
+// Firmware version: 1.1.1
 
 #include <WiFi.h>
 #include <WebServer.h>
