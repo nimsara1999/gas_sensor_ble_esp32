@@ -76,6 +76,7 @@ void blinkLEDinErrorPattern(int number_of_blinks);
 bool tryConnectToSavedWiFi();
 void doUpdate(const String &new_fw_version, const String &old_fw_version);
 void check_for_fw_updates(int interval);
+bool handleButtonPress();
 
 std::string string_to_hex(const std::string &input)
 {
@@ -271,7 +272,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 void switchToAPMode()
 {
   Serial.println("\n\n****************************************************************************************************\n****************************************************************************************************");
-  Serial.println("\nSwitching to AP mode...");
+  Serial.println("\nManually switching to AP mode...");
   bluetooth_sending_status = false;
   WiFi.mode(WIFI_AP);
   inAPMode = true;
@@ -283,48 +284,67 @@ void switchToAPMode()
 
 void blinkLEDInAPMode()
 {
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= blink_interval)
+  if (automatically_put_to_AP_mode)
   {
-    previousMillis = currentMillis;
-    led_state = !led_state;
-    digitalWrite(BUILTIN_LED, led_state);
-    if (automatically_put_to_AP_mode)
+    digitalWrite(BUILTIN_LED, HIGH);
+    delay(30);
+    digitalWrite(BUILTIN_LED, LOW);
+    delay(50);
+    digitalWrite(BUILTIN_LED, HIGH);
+    delay(30);
+    digitalWrite(BUILTIN_LED, LOW);
+    delay(50);
+    digitalWrite(BUILTIN_LED, HIGH);
+    delay(30);
+    digitalWrite(BUILTIN_LED, LOW);
+    delay(50);
+
+    Serial.println("Trying to connect to the last saved Wi-Fi network...");
+    if (tryConnectToSavedWiFi())
     {
-      if (currentMillis - previousMillisForAPMode >= wifi_search_interval)
-      {
-        Serial.println("Trying to connect to the last saved Wi-Fi network...");
-        previousMillisForAPMode = currentMillis;
-        if (tryConnectToSavedWiFi())
-        {
-          inAPMode = false;
-          WiFi.mode(WIFI_STA);
-          indicateSuccessfulConnection();
-          bluetooth_sending_status = true;
-          Serial.println("Data loaded from EEPROM.");
-          Serial.println("Scanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
-        }
-        else
-        {
-          Serial.println("Failed to connect to the last saved Wi-Fi network.\nRestarting AP mode...");
-          WiFi.mode(WIFI_AP_STA);
-        }
-      }
+      inAPMode = false;
+      WiFi.mode(WIFI_STA);
+      indicateSuccessfulConnection();
+      bluetooth_sending_status = true;
+      Serial.println("Connected to the last saved Wi-Fi network... Restarting the gateway");
+      delay(500);
+      ESP.restart();
+    }
+    else
+    {
+      Serial.println("Failed to connect to the last saved Wi-Fi network.\nRetrying in 2 second...");
+      delay(2000);
+      WiFi.mode(WIFI_AP_STA);
+      handleButtonPress();
+    }
+  }
+  else
+  {
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= blink_interval)
+    {
+      previousMillis = currentMillis;
+      led_state = !led_state;
+      digitalWrite(BUILTIN_LED, led_state);
     }
   }
 }
 
-void handleButtonPress()
+bool handleButtonPress()
 {
-  if (digitalRead(BOOT_PIN) == LOW && inAPMode == false)
+  if (digitalRead(BOOT_PIN) == LOW)
   {
     delay(100);
     if (digitalRead(BOOT_PIN) == LOW)
     {
+      Serial.println("\nBoot Button press recognized");
       automatically_put_to_AP_mode = false;
       switchToAPMode();
+      return true;
     }
+    return false;
   }
+  return false;
 }
 
 void saveWiFiCredentials(const String &ssid, const String &password)
@@ -452,7 +472,7 @@ bool tryConnectToSavedWiFi()
 
     WiFi.begin(savedSSID.c_str(), savedPassword.c_str());
 
-    int maxRetries = 10;
+    int maxRetries = 8;
     int retries = 0;
 
     while (WiFi.status() != WL_CONNECTED && retries < maxRetries)
@@ -807,18 +827,22 @@ void setup()
             { server.send(200, "text/plain", "Made by Nimsara & Sasindu."); });
 
   bluetooth_sending_status = false;
+  client.setInsecure(); // For development purposes, skip certificate validation
 
   // Try to connect to saved Wi-Fi credentials and load other configuration data
   if (!tryConnectToSavedWiFi() || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA" || selected_sensor_mac_address == "NA")
   {
-    Serial.println("Starting AP mode");
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP(ap_ssid, ap_password);
-    Serial.println("Access Point Started");
-    Serial.print("AP IP Address: ");
-    Serial.println(WiFi.softAPIP());
-    automatically_put_to_AP_mode = true;
-    inAPMode = true;
+    if (!handleButtonPress())
+    {
+      Serial.println("Automatically starting AP mode");
+      WiFi.mode(WIFI_AP_STA);
+      WiFi.softAP(ap_ssid, ap_password);
+      Serial.println("Access Point Started");
+      Serial.print("AP IP Address: ");
+      Serial.println(WiFi.softAPIP());
+      automatically_put_to_AP_mode = true;
+      inAPMode = true;
+    }
   }
   else
   {
@@ -827,16 +851,13 @@ void setup()
     indicateSuccessfulConnection();
     bluetooth_sending_status = true;
     Serial.println("Data loaded from EEPROM.");
-    Serial.println("Scanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
+    Serial.print("Firmware Version: ");
+    Serial.println(current_fw_version);
+    check_for_fw_updates(0);
+    Serial.println("\nScanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
   }
 
   server.begin();
-
-  client.setInsecure(); // For development purposes, skip certificate validation
-
-  Serial.print("Firmware Version: ");
-  Serial.println(current_fw_version);
-  check_for_fw_updates(0);
 
   timeClient.begin();
 
