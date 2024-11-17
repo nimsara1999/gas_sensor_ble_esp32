@@ -13,6 +13,10 @@
 #include <ESP32httpUpdate.h>
 #include <ArduinoJson.h>
 #include <WiFiClientSecure.h>
+#include <Adafruit_NeoPixel.h>
+
+#define LED_PIN 48
+#define NUM_PIXELS 1
 
 bool inAPMode = false;
 bool bluetooth_sending_status = false;
@@ -34,6 +38,7 @@ String loadedHeight = "NA";
 String selected_sensor_mac_address = "NA";
 String current_fw_version = "NA";
 String CHIPID = "123456";
+String postData;
 
 const int scanTimeSeconds = 1;
 const int BOOT_PIN = 0;
@@ -47,6 +52,7 @@ const int LOADED_HEIGHT_ADDR = 300;
 const int SENSOR_MAC_ADDR = 350;
 const int FW_VERSION_ADDR = 400;
 const int EEPROM_SIZE = 512;
+const int LED_brightness = 70;
 const int httpsPort = 443;
 const int sound_speed = 757;
 const long blink_interval = 500;          // Blink interval in milliseconds
@@ -67,15 +73,17 @@ WiFiClientSecure client;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 19800, 60000);
 
-String postData;
+Adafruit_NeoPixel strip(NUM_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 void indicateSuccessfulConnection();
-void indicateSuccessfulDataSendToServer();
-void blinkLEDinErrorPattern(int number_of_blinks);
+void indicateUnsuccessfulConnection();
+void indicateGatewayStart();
+void indicateReadyToReceiveData();
 bool tryConnectToSavedWiFi();
 void doUpdate(const String &new_fw_version, const String &old_fw_version);
 void check_for_fw_updates(int interval);
 bool handleButtonPress();
+void blinkRGBLedInPattern(int numTimes, int red, int green, int blue, int onTime1, int offTime1, int onTime2 = 0, int offTime2 = 0);
 
 std::string string_to_hex(const std::string &input)
 {
@@ -107,6 +115,30 @@ std::string format_hex_string(const std::string &hexString)
 int hex_to_int(const std::string &hexString)
 {
   return strtol(hexString.c_str(), nullptr, 16);
+}
+
+// Function to blink the LED in a specific RGB pattern
+void blinkRGBLedInPattern(int numTimes, int red, int green, int blue, int onTime1, int offTime1, int onTime2, int offTime2)
+{
+  for (int i = 0; i < numTimes; i++)
+  {
+    strip.setPixelColor(0, strip.Color(red, green, blue));
+    strip.show();
+    delay(onTime1);
+    strip.setPixelColor(0, strip.Color(0, 0, 0));
+    strip.show();
+    delay(offTime1);
+
+    if (onTime2 > 0 || offTime2 > 0)
+    {
+      strip.setPixelColor(0, strip.Color(red, green, blue));
+      strip.show();
+      delay(onTime2);
+      strip.setPixelColor(0, strip.Color(0, 0, 0));
+      strip.show();
+      delay(offTime2);
+    }
+  }
 }
 
 void sendDataToServer(void *param)
@@ -148,7 +180,7 @@ void sendDataToServer(void *param)
     if (freeHeap < 20000)
     {
       Serial.println("Free heap memory is low. Restarting ESP");
-      blinkLEDinErrorPattern(4); // Blink LED 4 times in error pattern
+      blinkRGBLedInPattern(8, LED_brightness, 0, 0, 100, 100); // blink red LED short pulses
       ESP.restart();
     }
 
@@ -161,7 +193,7 @@ void sendDataToServer(void *param)
       if (responseCode == 200)
       {
         Serial.println("Data sent successfully");
-        indicateSuccessfulDataSendToServer();
+        blinkRGBLedInPattern(1, 0, LED_brightness, 0, 30, 30, 60, 0); // blink green LED short pulses
         number_of_failed_attempts_to_connect_to_server = 0;
         break;
       }
@@ -171,12 +203,13 @@ void sendDataToServer(void *param)
   else
   {
     Serial.println("Connection to server failed");
+    blinkRGBLedInPattern(1, LED_brightness, 0, 0, 30, 30, 60, 0); // blink red LED short pulses
     number_of_failed_attempts_to_connect_to_server++;
     Serial.println("Number of failed attempts: " + String(number_of_failed_attempts_to_connect_to_server));
     if (number_of_failed_attempts_to_connect_to_server >= max_number_of_failed_attempts)
     {
       Serial.println("Restarting ESP");
-      blinkLEDinErrorPattern(2);
+      blinkRGBLedInPattern(max_number_of_failed_attempts, LED_brightness, 0, 0, 400, 200); // blink red LED long pulses for max_number_of_failed_attempts
       ESP.restart();
     }
   }
@@ -284,19 +317,6 @@ void blinkLEDInAPMode()
 {
   if (automatically_put_to_AP_mode)
   {
-    digitalWrite(BUILTIN_LED, HIGH);
-    delay(30);
-    digitalWrite(BUILTIN_LED, LOW);
-    delay(50);
-    digitalWrite(BUILTIN_LED, HIGH);
-    delay(30);
-    digitalWrite(BUILTIN_LED, LOW);
-    delay(50);
-    digitalWrite(BUILTIN_LED, HIGH);
-    delay(30);
-    digitalWrite(BUILTIN_LED, LOW);
-    delay(50);
-
     Serial.println("Trying to connect to the last saved Wi-Fi network...");
     if (tryConnectToSavedWiFi())
     {
@@ -323,7 +343,15 @@ void blinkLEDInAPMode()
     {
       previousMillis = currentMillis;
       led_state = !led_state;
-      digitalWrite(BUILTIN_LED, led_state);
+      if (led_state)
+      {
+        strip.setPixelColor(0, strip.Color(0, 0, LED_brightness));
+      }
+      else
+      {
+        strip.setPixelColor(0, strip.Color(0, 0, 0));
+      }
+      strip.show();
     }
   }
 }
@@ -361,6 +389,9 @@ void saveWiFiCredentials(const String &ssid, const String &password)
   Serial.println("Saved Wi-Fi credentials to EEPROM");
 
   EEPROM.commit();
+
+  blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 1000, 10); // cyan LED single long pulse
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);      // green LED two short pulses
 }
 
 void saveFwVersion(const String &fw_version)
@@ -404,7 +435,10 @@ void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone,
     EEPROM.write(LOADED_HEIGHT_ADDR + i, loadedHeight[i]);
 
   EEPROM.commit();
+
   Serial.println("Saved other configuration data to EEPROM");
+  blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 1000, 10); // cyan LED single long pulse
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);      // green LED two short pulses
 }
 
 void loadWiFiCredentials(String &ssid, String &password)
@@ -455,6 +489,8 @@ void loadWiFiCredentials(String &ssid, String &password)
   current_fw_version = String(fwVersionBuff);
 
   Serial.println("Loaded other configuration data from EEPROM");
+  blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 500, 10); // cyan LED single long pulse
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);     // blue LED two short pulses
 }
 
 bool tryConnectToSavedWiFi()
@@ -475,7 +511,8 @@ bool tryConnectToSavedWiFi()
 
     while (WiFi.status() != WL_CONNECTED && retries < maxRetries)
     {
-      delay(1000);
+      delay(950);
+      blinkRGBLedInPattern(1, LED_brightness, LED_brightness, LED_brightness, 50, 0);
       Serial.print(".");
       retries++;
     }
@@ -483,6 +520,7 @@ bool tryConnectToSavedWiFi()
     if (WiFi.status() == WL_CONNECTED)
     {
       Serial.println("\nSuccessfully connected to saved Wi-Fi");
+      indicateSuccessfulConnection();
       Serial.print("IP Address: ");
       Serial.println(WiFi.localIP());
       inAPMode = false;
@@ -490,6 +528,7 @@ bool tryConnectToSavedWiFi()
     }
   }
   Serial.println("Failed to connect to saved Wi-Fi");
+  indicateUnsuccessfulConnection();
   WiFi.mode(WIFI_AP_STA);
   return false;
 }
@@ -523,37 +562,43 @@ void handle_check_internet_connection()
   }
 }
 
-void indicateSuccessfulDataSendToServer()
-{
-  digitalWrite(BUILTIN_LED, HIGH);
-  delay(30);
-  digitalWrite(BUILTIN_LED, LOW);
-  delay(30);
-  digitalWrite(BUILTIN_LED, HIGH);
-  delay(30);
-  digitalWrite(BUILTIN_LED, LOW);
-}
-
+// blink blue and then green for 2 times
 void indicateSuccessfulConnection()
 {
-  digitalWrite(BUILTIN_LED, HIGH);
-  delay(3000);
-  digitalWrite(BUILTIN_LED, LOW);
+  blinkRGBLedInPattern(1, 0, 0, LED_brightness, 500, 0);
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 500, 500);
+  blinkRGBLedInPattern(1, 0, 0, LED_brightness, 500, 0);
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 500, 0);
 }
 
-void blinkLEDinErrorPattern(int number_of_blinks)
+// blink blue and then red for 2 times
+void indicateUnsuccessfulConnection()
 {
-  for (int i = 0; i < number_of_blinks; i++)
-  {
-    digitalWrite(BUILTIN_LED, HIGH);
-    delay(30);
-    digitalWrite(BUILTIN_LED, LOW);
-    delay(30);
-    digitalWrite(BUILTIN_LED, HIGH);
-    delay(500);
-    digitalWrite(BUILTIN_LED, LOW);
-    delay(500);
-  }
+  blinkRGBLedInPattern(1, 0, 0, LED_brightness, 500, 0);
+  blinkRGBLedInPattern(1, LED_brightness, 0, 0, 500, 500);
+  blinkRGBLedInPattern(1, 0, 0, LED_brightness, 500, 0);
+  blinkRGBLedInPattern(1, LED_brightness, 0, 0, 500, 0);
+}
+
+// blink white, cyan, magenta, yellow, white short pulses
+void indicateGatewayStart()
+{
+  blinkRGBLedInPattern(1, LED_brightness, LED_brightness, LED_brightness, 300, 10);
+  blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 300, 10);
+  blinkRGBLedInPattern(1, LED_brightness, 0, LED_brightness, 300, 10);
+  blinkRGBLedInPattern(1, LED_brightness, LED_brightness, 0, 300, 10);
+  blinkRGBLedInPattern(1, LED_brightness, LED_brightness, LED_brightness, 300, 500);
+}
+
+// blink white, green, white, green, white, green short pulses
+void indicateReadyToReceiveData()
+{
+  blinkRGBLedInPattern(1, LED_brightness, LED_brightness, LED_brightness, 500, 10);
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 500, 10);
+  blinkRGBLedInPattern(1, LED_brightness, LED_brightness, LED_brightness, 500, 10);
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 500, 10);
+  blinkRGBLedInPattern(1, LED_brightness, LED_brightness, LED_brightness, 500, 10);
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 500, 500);
 }
 
 void handle_other_config()
@@ -676,6 +721,7 @@ void handle_sync_sensor()
   if (server.method() == HTTP_GET)
   {
     Serial.println("\nWaiting for user to press SYNC button on sensor...");
+    blinkRGBLedInPattern(3, LED_brightness, 0, LED_brightness, 50, 50); // blink 3 purple LED short pulses
     inSensorSearchingMode = true;
     selected_sensor_mac_address = "NA";
     while (inSensorSearchingMode && inAPMode)
@@ -686,6 +732,7 @@ void handle_sync_sensor()
       {
         server.send(200, "application/json", "{\"status\": 1, \"sync_mac\": \"" + selected_sensor_mac_address + "\"}");
         Serial.println("SYNCed sensor mac sent to the app");
+        blinkRGBLedInPattern(2, LED_brightness, 0, LED_brightness, 100, 100); // blink 2 purple LED short pulses
         inSensorSearchingMode = false;
         break;
       }
@@ -707,6 +754,8 @@ void handle_confirm_synced_sensor()
       for (int i = 0; i < selected_sensor_mac_address.length(); i++)
         EEPROM.write(SENSOR_MAC_ADDR + i, selected_sensor_mac_address[i]);
       EEPROM.commit();
+      blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 1000, 10); // cyan LED single long pulse
+      blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);      // green LED two short pulses
       Serial.println("Saved mac address of the sensor to the EEPROM");
       server.send(200, "application/json", "{\"status\": 1, \"confirmed_mac\": \"" + selected_sensor_mac_address + "\"}");
     }
@@ -730,6 +779,7 @@ void check_for_fw_updates(int interval)
     {
       Serial.println("Internet connection: FAILED!\nUpdate check failed");
       client.stop();
+      blinkRGBLedInPattern(2, LED_brightness, 0, 0, 30, 30); // 2 red LED short pulses
       return;
     }
 
@@ -753,12 +803,13 @@ void check_for_fw_updates(int interval)
       if (payload == current_fw_version)
       {
         Serial.println("Firmware update check done. No new updates available");
-        delay(500);
+        blinkRGBLedInPattern(1, LED_brightness, LED_brightness, 0, 400, 5); // yellow LED single long pulse
+        blinkRGBLedInPattern(1, 0, LED_brightness, 0, 70, 100);             // green LED single long pulse
       }
       else
       {
         Serial.println("Firmware update check done. New updates available. Initiating firmware update in 5 seconds...");
-        delay(5000);
+        blinkRGBLedInPattern(5, LED_brightness, LED_brightness, 0, 800, 200); // 5 yellow LED long pulses
         doUpdate(payload, current_fw_version);
       }
     }
@@ -773,6 +824,9 @@ void check_for_fw_updates(int interval)
 // updating firmware fetching latest firmware bin file from server
 void doUpdate(const String &new_fw_version, const String &old_fw_version)
 {
+  strip.setPixelColor(0, strip.Color(LED_brightness, LED_brightness, 0));
+  strip.show();
+
   Serial.println("Fetching Update...");
   String url = "https://raw.githubusercontent.com/nimsara1999/OTAupdate/refs/heads/main/firmware.bin";
 
@@ -785,6 +839,8 @@ void doUpdate(const String &new_fw_version, const String &old_fw_version)
   case HTTP_UPDATE_FAILED:
     Serial.println("Update failed!");
     saveFwVersion(old_fw_version);
+    blinkRGBLedInPattern(1, 0, 0, 0, 30, 30, 200, 5);        // LED off
+    blinkRGBLedInPattern(3, LED_brightness, 0, 0, 300, 300); // 3 red LED short pulses
     break;
   case HTTP_UPDATE_NO_UPDATES:
     Serial.println("No new update available");
@@ -804,13 +860,15 @@ void setup()
 {
   Serial.begin(115200);
 
-  Serial.println("\n\nStarting Gateway...\n\n");
-
-  EEPROM.begin(EEPROM_SIZE);
+  strip.begin(); // Initialize the LED
+  strip.show();  // Turn off all LEDs
 
   pinMode(BOOT_PIN, INPUT_PULLUP);
-  pinMode(BUILTIN_LED, OUTPUT);
-  digitalWrite(BUILTIN_LED, LOW);
+
+  Serial.println("\n\nStarting Gateway...\n\n");
+  indicateGatewayStart(); // blink white, cyan, magenta, yellow, white short pulses
+
+  EEPROM.begin(EEPROM_SIZE);
 
   server.on("/configuration/v1/wifi-config", HTTP_POST, handle_connect_to_new_wifi);
   server.on("/configuration/v1/other-config", HTTP_POST, handle_other_config);
@@ -829,6 +887,7 @@ void setup()
     if (!handleButtonPress())
     {
       Serial.println("Automatically starting AP mode");
+      blinkRGBLedInPattern(3, 0, 0, LED_brightness, 30, 50); // blink blue LED short pulses for 3 times
       WiFi.mode(WIFI_AP_STA);
       WiFi.softAP(ap_ssid, ap_password);
       Serial.println("Access Point Started");
@@ -848,6 +907,7 @@ void setup()
     Serial.print("Firmware Version: ");
     Serial.println(current_fw_version);
     check_for_fw_updates(0);
+    indicateReadyToReceiveData();
     Serial.println("\nScanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
   }
 
