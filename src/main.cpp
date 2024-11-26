@@ -35,9 +35,11 @@ String timeZone = "NA";
 String longitude = "NA";
 String latitude = "NA";
 String loadedHeight = "NA";
+String gatewayName = "NA";
 String selected_sensor_mac_address = "NA";
 String current_fw_version = "NA";
 String CHIPID = "123456";
+String ap_ssid = "Gateway";
 String postData;
 
 const int scanTimeSeconds = 1;
@@ -51,6 +53,7 @@ const int LATITUDE_ADDR = 250;
 const int LOADED_HEIGHT_ADDR = 300;
 const int SENSOR_MAC_ADDR = 350;
 const int FW_VERSION_ADDR = 400;
+const int GATEWAY_NAME_ADDR = 450;
 const int EEPROM_SIZE = 512;
 const int LED_brightness = 70;
 const int httpsPort = 443;
@@ -58,11 +61,11 @@ const int sound_speed = 757;
 const long blink_interval = 500;          // Blink interval in milliseconds
 const long fw_update_interval = 60000;    // Firmware update check interval in milliseconds
 const long wifi_search_interval = 120000; // Wi-Fi search interval in milliseconds
-const char *ap_ssid = "Gateway";
 const char *ap_password = "123456789";
 const char *serverHost = "elysiumapi.overleap.lk";
 const char *apiPath = "/api/v2/gas/stream/esp32_que"; // API endpoint
 
+static char apSsidBuffer[50];
 static unsigned long lastSendTime = 0;
 
 BLEScan *pBLEScan;
@@ -286,6 +289,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
                        "\"LONGITUDE\":\"" + String(longitude) + "\"," +
                        "\"LATITUDE\":\"" + String(latitude) + "\"," +
                        "\"LOADED_HEIGHT\":" + String(loadedHeight.toFloat()) + "," +
+                       "\"GW_NAME\":\"" + String(gatewayName) + "\"," +
                        "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
 
             if (millis() - lastSendTime > 5000)
@@ -408,7 +412,7 @@ void saveFwVersion(const String &fw_version)
   EEPROM.commit();
 }
 
-void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone, const String &longitude, const String &latitude, const String &loadedHeight)
+void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone, const String &longitude, const String &latitude, const String &loadedHeight, const String &gatewayName)
 {
   EEPROM.begin(EEPROM_SIZE);
 
@@ -422,6 +426,8 @@ void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone,
     EEPROM.write(i, 0);
   for (int i = LOADED_HEIGHT_ADDR; i < LOADED_HEIGHT_ADDR + 50; i++)
     EEPROM.write(i, 0);
+  for (int i = GATEWAY_NAME_ADDR; i < GATEWAY_NAME_ADDR + 50; i++)
+    EEPROM.write(i, 0);
 
   for (int i = 0; i < tankSize.length(); i++)
     EEPROM.write(TANKSIZE_ADDR + i, tankSize[i]);
@@ -433,6 +439,8 @@ void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone,
     EEPROM.write(LATITUDE_ADDR + i, latitude[i]);
   for (int i = 0; i < loadedHeight.length(); i++)
     EEPROM.write(LOADED_HEIGHT_ADDR + i, loadedHeight[i]);
+  for (int i = 0; i < gatewayName.length(); i++)
+    EEPROM.write(GATEWAY_NAME_ADDR + i, gatewayName[i]);
 
   EEPROM.commit();
 
@@ -462,6 +470,7 @@ void loadWiFiCredentials(String &ssid, String &password)
   char longitudeBuff[50];
   char latitudeBuff[50];
   char loadedHeightBuff[50];
+  char gatewayNameBuff[50];
   char selectedSensorMacBuff[50];
   char fwVersionBuff[50];
 
@@ -479,12 +488,15 @@ void loadWiFiCredentials(String &ssid, String &password)
     selectedSensorMacBuff[i] = EEPROM.read(SENSOR_MAC_ADDR + i);
   for (int i = 0; i < 50; i++)
     fwVersionBuff[i] = EEPROM.read(FW_VERSION_ADDR + i);
+  for (int i = 0; i < 50; i++)
+    gatewayNameBuff[i] = EEPROM.read(GATEWAY_NAME_ADDR + i);
 
   tankSize = String(tankSizeBuff);
   timeZone = String(timeZoneBuff);
   longitude = String(longitudeBuff);
   latitude = String(latitudeBuff);
   loadedHeight = String(loadedHeightBuff);
+  gatewayName = String(gatewayNameBuff);
   selected_sensor_mac_address = String(selectedSensorMacBuff);
   current_fw_version = String(fwVersionBuff);
 
@@ -624,6 +636,7 @@ void handle_other_config()
     longitude = doc["longitude"].as<String>();
     latitude = doc["latitude"].as<String>();
     loadedHeight = doc["loadedHeight"].as<String>();
+    gatewayName = doc["gatewayName"].as<String>();
 
     Serial.print("Received TankSize: ");
     Serial.print(tankSize);
@@ -635,10 +648,12 @@ void handle_other_config()
     Serial.println(latitude);
     Serial.print("\tLoaded Height: ");
     Serial.println(loadedHeight);
+    Serial.print("\tGateway Name: ");
+    Serial.println(gatewayName);
 
     server.send(200, "application/json", "{\"status\": 1}");
 
-    saveOtherConfigDataToEEPROM(tankSize, timeZone, longitude, latitude, loadedHeight);
+    saveOtherConfigDataToEEPROM(tankSize, timeZone, longitude, latitude, loadedHeight, gatewayName);
     Serial.println("Restart the gateway to start sending data to the server");
   }
   else
@@ -886,8 +901,20 @@ void setup()
 
   pinMode(BOOT_PIN, INPUT_PULLUP);
 
-  Serial.println("\n\nStarting Gateway...\n\n");
+  Serial.println("\n\nStarting Gateway...\n");
   indicateGatewayStart(); // blink white, cyan, magenta, yellow, white short pulses
+
+  // Get the MAC address
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char macStr[13];
+  snprintf(macStr, sizeof(macStr), "%02X%02X%02X", mac[3], mac[4], mac[5]);
+  ap_ssid += "-";
+  ap_ssid += macStr;
+
+  Serial.print("AP SSID: ");
+  Serial.println(ap_ssid);
+  Serial.println("");
 
   EEPROM.begin(EEPROM_SIZE);
 
@@ -903,7 +930,7 @@ void setup()
   client.setInsecure(); // For development purposes, skip certificate validation
 
   // Try to connect to saved Wi-Fi credentials and load other configuration data
-  if (!tryConnectToSavedWiFi() || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA" || selected_sensor_mac_address == "NA")
+  if (!tryConnectToSavedWiFi() || timeZone == "NA" || tankSize == "NA" || longitude == "NA" || latitude == "NA" || loadedHeight == "NA" || selected_sensor_mac_address == "NA" || gatewayName == "NA")
   {
     if (!handleButtonPress())
     {
@@ -923,10 +950,12 @@ void setup()
     inAPMode = false;
     WiFi.mode(WIFI_STA);
     indicateSuccessfulConnection();
-    if (isValidString(timeZone, 50) && isValidString(tankSize, 50) && isValidString(longitude, 50) && isValidString(latitude, 50) && isValidString(loadedHeight, 50))
+    if (isValidString(timeZone, 50) && isValidString(tankSize, 50) && isValidString(longitude, 50) && isValidString(latitude, 50) && isValidString(loadedHeight, 50) && isValidString(gatewayName, 50))
     {
       bluetooth_sending_status = true;
       Serial.println("Data loaded from EEPROM.");
+      Serial.print("Gateway Name: ");
+      Serial.println(gatewayName);
       Serial.print("Firmware Version: ");
       Serial.println(current_fw_version);
       check_for_fw_updates(0);
