@@ -127,20 +127,20 @@ void blinkRGBLedInPattern(int numTimes, int red, int green, int blue, int onTime
 {
   for (int i = 0; i < numTimes; i++)
   {
-    // strip.setPixelColor(0, strip.Color(red, green, blue));
-    // strip.show();
+    strip.setPixelColor(0, strip.Color(red, green, blue));
+    strip.show();
     delay(onTime1);
-    // strip.setPixelColor(0, strip.Color(0, 0, 0));
-    // strip.show();
+    strip.setPixelColor(0, strip.Color(0, 0, 0));
+    strip.show();
     delay(offTime1);
 
     if (onTime2 > 0 || offTime2 > 0)
     {
-      // strip.setPixelColor(0, strip.Color(red, green, blue));
+      strip.setPixelColor(0, strip.Color(red, green, blue));
       strip.show();
       delay(onTime2);
-      // strip.setPixelColor(0, strip.Color(0, 0, 0));
-      // strip.show();
+      strip.setPixelColor(0, strip.Color(0, 0, 0));
+      strip.show();
       delay(offTime2);
     }
   }
@@ -185,7 +185,7 @@ void sendDataToServer(void *param)
     if (freeHeap < 20000)
     {
       Serial.println("Free heap memory is low. Restarting ESP");
-      // blinkRGBLedInPattern(8, LED_brightness, 0, 0, 100, 100); // blink red LED short pulses
+      blinkRGBLedInPattern(8, LED_brightness, 0, 0, 100, 100); // blink red LED short pulses
       ESP.restart();
     }
 
@@ -198,8 +198,9 @@ void sendDataToServer(void *param)
       if (responseCode == 200)
       {
         Serial.println("Data sent successfully");
-        // blinkRGBLedInPattern(1, 0, LED_brightness, 0, 30, 30, 60, 0); // blink green LED short pulses
+        blinkRGBLedInPattern(1, 0, LED_brightness, 0, 30, 30, 60, 0); // blink green LED short pulses
         esp_task_wdt_reset();
+        Serial.println("Watch dog timer reset");
         number_of_failed_attempts_to_connect_to_server = 0;
         break;
       }
@@ -209,13 +210,13 @@ void sendDataToServer(void *param)
   else
   {
     Serial.println("Connection to server failed");
-    // blinkRGBLedInPattern(1, LED_brightness, 0, 0, 30, 30, 60, 0); // blink red LED short pulses
+    blinkRGBLedInPattern(1, LED_brightness, 0, 0, 30, 30, 60, 0); // blink red LED short pulses
     number_of_failed_attempts_to_connect_to_server++;
     Serial.println("Number of failed attempts: " + String(number_of_failed_attempts_to_connect_to_server));
     if (number_of_failed_attempts_to_connect_to_server >= max_number_of_failed_attempts)
     {
       Serial.println("Restarting ESP");
-      // blinkRGBLedInPattern(max_number_of_failed_attempts, LED_brightness, 0, 0, 400, 200); // blink red LED long pulses for max_number_of_failed_attempts
+      blinkRGBLedInPattern(max_number_of_failed_attempts, LED_brightness, 0, 0, 400, 200); // blink red LED long pulses for max_number_of_failed_attempts
       ESP.restart();
     }
   }
@@ -310,6 +311,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 void switchToAPMode()
 {
   esp_task_wdt_reset();
+  Serial.println("Watch dog timer reset");
   Serial.println("\n\n****************************************************************************************************\n****************************************************************************************************");
   Serial.println("\nManually switching to AP mode...");
   bluetooth_sending_status = false;
@@ -334,6 +336,7 @@ void blinkLEDInAPMode()
       bluetooth_sending_status = true;
       Serial.println("Connected to the last saved Wi-Fi network... Restarting the gateway");
       esp_task_wdt_reset();
+      Serial.println("Watch dog timer reset");
       delay(500);
       ESP.restart();
     }
@@ -351,6 +354,7 @@ void blinkLEDInAPMode()
     if (currentMillis - previousMillis >= blink_interval)
     {
       esp_task_wdt_reset();
+      Serial.println("Watch dog timer reset");
       previousMillis = currentMillis;
       led_state = !led_state;
       if (led_state)
@@ -387,6 +391,7 @@ void saveWiFiCredentials(const String &ssid, const String &password)
 {
   EEPROM.begin(EEPROM_SIZE);
   esp_task_wdt_reset();
+  Serial.println("Watch dog timer reset");
   for (int i = SSID_ADDR; i < SSID_ADDR + 50; i++)
     EEPROM.write(i, 0);
   for (int i = PASS_ADDR; i < PASS_ADDR + 50; i++)
@@ -400,13 +405,14 @@ void saveWiFiCredentials(const String &ssid, const String &password)
 
   EEPROM.commit();
 
-  // blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 1000, 10); // cyan LED single long pulse
-  // blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);      // green LED two short pulses
+  blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 1000, 10); // cyan LED single long pulse
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);      // green LED two short pulses
 }
 
 void saveFwVersion(const String &fw_version)
 {
   esp_task_wdt_reset();
+  Serial.println("Watch dog timer reset");
   EEPROM.begin(EEPROM_SIZE);
 
   for (int i = FW_VERSION_ADDR; i < FW_VERSION_ADDR + 50; i++)
@@ -422,6 +428,7 @@ void saveFwVersion(const String &fw_version)
 void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone, const String &longitude, const String &latitude, const String &loadedHeight, const String &gatewayName)
 {
   esp_task_wdt_reset();
+  Serial.println("Watch dog timer reset");
   EEPROM.begin(EEPROM_SIZE);
 
   for (int i = TANKSIZE_ADDR; i < TANKSIZE_ADDR + 50; i++)
@@ -453,13 +460,14 @@ void saveOtherConfigDataToEEPROM(const String &tankSize, const String &timeZone,
   EEPROM.commit();
 
   Serial.println("Saved other configuration data to EEPROM");
-  // blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 1000, 10); // cyan LED single long pulse
-  // blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);      // green LED two short pulses
+  blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 1000, 10); // cyan LED single long pulse
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);      // green LED two short pulses
 }
 
 void loadWiFiCredentials(String &ssid, String &password)
 {
   esp_task_wdt_reset();
+  Serial.println("Watch dog timer reset");
   EEPROM.begin(EEPROM_SIZE);
 
   char ssidBuff[50];
@@ -510,8 +518,8 @@ void loadWiFiCredentials(String &ssid, String &password)
   current_fw_version = String(fwVersionBuff);
 
   Serial.println("Loaded other configuration data from EEPROM");
-  // blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 500, 10); // cyan LED single long pulse
-  // blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);     // blue LED two short pulses
+  blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 500, 10); // cyan LED single long pulse
+  blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);     // blue LED two short pulses
 }
 
 bool tryConnectToSavedWiFi()
@@ -523,6 +531,7 @@ bool tryConnectToSavedWiFi()
   if (savedSSID.length() > 0 && savedPassword.length() > 0)
   {
     esp_task_wdt_reset();
+    Serial.println("Watch dog timer reset");
     Serial.print("Trying to connect to saved SSID: ");
     Serial.print(savedSSID);
 
@@ -534,7 +543,7 @@ bool tryConnectToSavedWiFi()
     while (WiFi.status() != WL_CONNECTED && retries < maxRetries)
     {
       delay(950);
-      // blinkRGBLedInPattern(1, LED_brightness, LED_brightness, LED_brightness, 50, 0);
+      blinkRGBLedInPattern(1, LED_brightness, LED_brightness, LED_brightness, 50, 0);
       Serial.print(".");
       retries++;
     }
@@ -543,6 +552,7 @@ bool tryConnectToSavedWiFi()
     {
       Serial.println("\nSuccessfully connected to saved Wi-Fi");
       esp_task_wdt_reset();
+      Serial.println("Watch dog timer reset");
       indicateSuccessfulConnection();
       Serial.print("IP Address: ");
       Serial.println(WiFi.localIP());
@@ -558,7 +568,6 @@ bool tryConnectToSavedWiFi()
 
 void handle_check_internet_connection()
 {
-  esp_task_wdt_reset();
   Serial.println("\nChecking Internet connection...");
   if (server.method() == HTTP_GET)
   {
@@ -568,6 +577,7 @@ void handle_check_internet_connection()
       {
         Serial.println("Connected to the Internet");
         esp_task_wdt_reset();
+        Serial.println("Watch dog timer reset");
         Serial.println("Restart the gateway to start sending data to the server");
         server.send(200, "application/json", "{\"internet_connected\": 1, \"wifi_connected\": 1}");
       }
@@ -631,6 +641,7 @@ void handle_other_config()
   if (server.method() == HTTP_POST && server.uri() == "/configuration/v1/other-config")
   {
     esp_task_wdt_reset();
+    Serial.println("Watch dog timer reset");
     Serial.println("\nReceiving other configuration data");
 
     JsonDocument doc;
@@ -681,6 +692,7 @@ void handle_connect_to_new_wifi()
   if (server.method() == HTTP_POST)
   {
     esp_task_wdt_reset();
+    Serial.println("Watch dog timer reset");
     JsonDocument doc;
 
     String requestBody = server.arg("plain");
@@ -751,8 +763,9 @@ void handle_sync_sensor()
   if (server.method() == HTTP_GET)
   {
     esp_task_wdt_reset();
+    Serial.println("Watch dog timer reset");
     Serial.println("\nWaiting for user to press SYNC button on sensor...");
-    // blinkRGBLedInPattern(3, LED_brightness, 0, LED_brightness, 50, 50); // blink 3 purple LED short pulses
+    blinkRGBLedInPattern(3, LED_brightness, 0, LED_brightness, 50, 50); // blink 3 purple LED short pulses
     inSensorSearchingMode = true;
     selected_sensor_mac_address = "NA";
     while (inSensorSearchingMode && inAPMode)
@@ -763,7 +776,7 @@ void handle_sync_sensor()
       {
         server.send(200, "application/json", "{\"status\": 1, \"sync_mac\": \"" + selected_sensor_mac_address + "\"}");
         Serial.println("SYNCed sensor mac sent to the app");
-        // blinkRGBLedInPattern(2, LED_brightness, 0, LED_brightness, 100, 100); // blink 2 purple LED short pulses
+        blinkRGBLedInPattern(2, LED_brightness, 0, LED_brightness, 100, 100); // blink 2 purple LED short pulses
         inSensorSearchingMode = false;
         break;
       }
@@ -778,6 +791,7 @@ void handle_confirm_synced_sensor()
     if (selected_sensor_mac_address != "NA")
     {
       esp_task_wdt_reset();
+      Serial.println("Watch dog timer reset");
       Serial.println("Confirmed synced sensor. Writing to EEPROM...");
       bluetooth_sending_status = false;
       EEPROM.begin(EEPROM_SIZE);
@@ -786,8 +800,8 @@ void handle_confirm_synced_sensor()
       for (int i = 0; i < selected_sensor_mac_address.length(); i++)
         EEPROM.write(SENSOR_MAC_ADDR + i, selected_sensor_mac_address[i]);
       EEPROM.commit();
-      // blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 1000, 10); // cyan LED single long pulse
-      // blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);      // green LED two short pulses
+      blinkRGBLedInPattern(1, 0, LED_brightness, LED_brightness, 1000, 10); // cyan LED single long pulse
+      blinkRGBLedInPattern(1, 0, LED_brightness, 0, 50, 50, 100, 100);      // green LED two short pulses
       Serial.println("Saved mac address of the sensor to the EEPROM");
       server.send(200, "application/json", "{\"status\": 1, \"confirmed_mac\": \"" + selected_sensor_mac_address + "\"}");
     }
@@ -1012,6 +1026,7 @@ void setup()
 void loop()
 {
   esp_task_wdt_reset();
+  Serial.println("Watch dog timer reset");
   server.handleClient();
 
   if (inAPMode)
