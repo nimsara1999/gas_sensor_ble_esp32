@@ -18,7 +18,7 @@
 
 #define LED_PIN 48
 #define NUM_PIXELS 1
-#define WDT_TIMEOUT 120 // Watchdog Timeout in seconds
+#define WDT_TIMEOUT 20 // Watchdog Timeout in seconds
 
 bool inAPMode = false;
 bool bluetooth_sending_status = false;
@@ -330,7 +330,7 @@ void blinkLEDInAPMode()
     {
       inAPMode = false;
       WiFi.mode(WIFI_STA);
-      // indicateSuccessfulConnection();
+      indicateSuccessfulConnection();
       bluetooth_sending_status = true;
       Serial.println("Connected to the last saved Wi-Fi network... Restarting the gateway");
       esp_task_wdt_reset();
@@ -543,7 +543,7 @@ bool tryConnectToSavedWiFi()
     {
       Serial.println("\nSuccessfully connected to saved Wi-Fi");
       esp_task_wdt_reset();
-      // indicateSuccessfulConnection();
+      indicateSuccessfulConnection();
       Serial.print("IP Address: ");
       Serial.println(WiFi.localIP());
       inAPMode = false;
@@ -551,7 +551,7 @@ bool tryConnectToSavedWiFi()
     }
   }
   Serial.println("Failed to connect to saved Wi-Fi");
-  // indicateUnsuccessfulConnection();
+  indicateUnsuccessfulConnection();
   WiFi.mode(WIFI_AP_STA);
   return false;
 }
@@ -729,7 +729,7 @@ void handle_connect_to_new_wifi()
       Serial.print("Wi-Fi server (AP) IP Address: ");
       Serial.println(WiFi.softAPIP());
 
-      // indicateSuccessfulConnection();
+      indicateSuccessfulConnection();
     }
     else
     {
@@ -913,7 +913,7 @@ void setup()
 {
   Serial.begin(115200);
 
-  esp_task_wdt_init(WDT_TIMEOUT, true); // 60-second timeout, true to trigger a reset
+  esp_task_wdt_init(WDT_TIMEOUT, true); // timeout, true to trigger a reset
   esp_task_wdt_add(NULL);               // Add the current task to the WDT
 
   strip.begin(); // Initialize the LED
@@ -922,7 +922,7 @@ void setup()
   pinMode(BOOT_PIN, INPUT_PULLUP);
 
   Serial.println("\n\nStarting Gateway...\n");
-  // indicateGatewayStart(); // blink white, cyan, magenta, yellow, white short pulses
+  indicateGatewayStart(); // blink white, cyan, magenta, yellow, white short pulses
 
   // Get the MAC address
   uint8_t mac[6];
@@ -955,7 +955,7 @@ void setup()
     if (!handleButtonPress())
     {
       Serial.println("Automatically starting AP mode");
-      // blinkRGBLedInPattern(3, 0, 0, LED_brightness, 30, 50); // blink blue LED short pulses for 3 times
+      blinkRGBLedInPattern(3, 0, 0, LED_brightness, 30, 50); // blink blue LED short pulses for 3 times
       WiFi.mode(WIFI_AP_STA);
       WiFi.softAP(ap_ssid, ap_password);
       Serial.println("Access Point Started");
@@ -969,7 +969,7 @@ void setup()
   {
     inAPMode = false;
     WiFi.mode(WIFI_STA);
-    // indicateSuccessfulConnection();
+    indicateSuccessfulConnection();
     if (isValidString(timeZone, 50) && isValidString(tankSize, 50) && isValidString(longitude, 50) && isValidString(latitude, 50) && isValidString(loadedHeight, 50) && isValidString(gatewayName, 50))
     {
       bluetooth_sending_status = true;
@@ -979,7 +979,7 @@ void setup()
       Serial.print("Firmware Version: ");
       Serial.println(current_fw_version);
       check_for_fw_updates(0);
-      // indicateReadyToReceiveData();
+      indicateReadyToReceiveData();
       Serial.println("\nScanning for Gas sensor of MAC address: " + selected_sensor_mac_address);
     }
     else
@@ -988,7 +988,7 @@ void setup()
       while (1)
       {
         delay(100);
-        // blinkRGBLedInPattern(1, LED_brightness, 0, 0, 100, 200); // blink red LED short pulses
+        blinkRGBLedInPattern(1, LED_brightness, 0, 0, 100, 200); // blink red LED short pulses
         if (handleButtonPress())
         {
           break;
@@ -1016,7 +1016,7 @@ void loop()
 
   if (inAPMode)
   {
-    // blinkLEDInAPMode();
+    blinkLEDInAPMode();
   }
   else
   {
