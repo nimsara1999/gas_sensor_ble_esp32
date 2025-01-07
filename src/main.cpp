@@ -1,4 +1,4 @@
-// Firmware version: S3 1.0.1
+// Firmware version: s3-1.0.2
 
 #include <WiFi.h>
 #include <WebServer.h>
@@ -18,7 +18,7 @@
 
 #define LED_PIN 48
 #define NUM_PIXELS 1
-#define WDT_TIMEOUT 20 // Watchdog Timeout in seconds
+#define WDT_TIMEOUT 120 // Watchdog Timeout in seconds
 
 bool inAPMode = false;
 bool bluetooth_sending_status = false;
