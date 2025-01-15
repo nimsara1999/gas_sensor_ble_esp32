@@ -178,8 +178,8 @@ void sendDataToServer(void *param)
     client.println(String("POST ") + apiPath + " HTTP/1.1");
     client.println(String("Host: ") + serverHost);
     client.println("Content-Type: application/json");
-    client.print("Content-Length: ");
     client.println("X-API-KEY: " + apiKey);
+    client.print("Content-Length: ");
     client.println(postData.length());
     client.println();
     client.println(postData);
@@ -373,21 +373,22 @@ void blinkLEDInAPMode()
   else
   {
     unsigned long currentMillis = millis();
+    // Serial.println("AP mode manually triggered");
     if (currentMillis - previousMillis >= blink_interval)
     {
       esp_task_wdt_reset();
-      Serial.println("Watch dog timer reset");
+      // Serial.println("Watch dog timer reset");
       previousMillis = currentMillis;
       led_state = !led_state;
       if (led_state)
       {
-        // strip.setPixelColor(0, strip.Color(0, 0, LED_brightness));
+        strip.setPixelColor(0, strip.Color(0, 0, LED_brightness));
       }
       else
       {
-        // strip.setPixelColor(0, strip.Color(0, 0, 0));
+        strip.setPixelColor(0, strip.Color(0, 0, 0));
       }
-      // strip.show();
+      strip.show();
     }
   }
 }
@@ -1018,8 +1019,13 @@ void setup()
     inAPMode = false;
     WiFi.mode(WIFI_STA);
     indicateSuccessfulConnection();
-    if (isValidString(timeZone, 50) && isValidString(tankSize, 50) && isValidString(longitude, 50) && isValidString(latitude, 50) && isValidString(loadedHeight, 50) && isValidString(gatewayName, 50) && isValidString(apiKey, 50))
+    if (isValidString(timeZone, 50) && isValidString(tankSize, 50) && isValidString(longitude, 50) && isValidString(latitude, 50) && isValidString(loadedHeight, 50) && isValidString(gatewayName, 50))
     {
+      if (!isValidString(apiKey, 50))
+      {
+        apiKey = "S+6nCxThMZvzQYDy3z2NMWSaF6wvPjSvCtPOkPMrKII=";
+        Serial.println("Invalid API key loaded. Using default API key");
+      }
       bluetooth_sending_status = true;
       Serial.println("Data loaded from EEPROM.");
       Serial.print("Gateway Name: ");
@@ -1059,8 +1065,6 @@ void setup()
 
 void loop()
 {
-  esp_task_wdt_reset();
-  Serial.println("Watch dog timer reset");
   server.handleClient();
 
   if (inAPMode)
@@ -1071,6 +1075,7 @@ void loop()
   {
     check_for_fw_updates(fw_update_interval);
     handleButtonPress();
+    esp_task_wdt_reset();
     BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
     pBLEScan->clearResults();
   }

@@ -11,6 +11,10 @@
 - Added delay of 2000 ms after an failed attempt to send data to the server.
 - When sending a data packet, retry until 4 failed attempts and ignore the packet. Show a red pulse with LED.
 
+## V S3-1.0.4
+
+- Use default API key if the current API key is invalid
+
 ## LED Blinking Patterns
 
 ### Color Codes
