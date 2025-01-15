@@ -1,4 +1,4 @@
-# V S3-1.0.3
+# ESP32-S3 Gateway
 
 ## Release Notes
 
