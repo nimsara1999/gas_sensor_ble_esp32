@@ -1019,6 +1019,8 @@ void setup()
     if (!handleButtonPress())
     {
       Serial.println("Automatically starting AP mode");
+      esp_task_wdt_reset();
+      Serial.println("Watch dog timer reset");
       blinkRGBLedInPattern(3, 0, 0, LED_brightness, 30, 50); // blink blue LED short pulses for 3 times
       WiFi.mode(WIFI_AP_STA);
       WiFi.softAP(ap_ssid, ap_password);
@@ -1041,6 +1043,8 @@ void setup()
         apiKey = "S+6nCxThMZvzQYDy3z2NMWSaF6wvPjSvCtPOkPMrKII=";
         Serial.println("Invalid API key loaded. Using default API key");
       }
+      esp_task_wdt_reset();
+      Serial.println("Watch dog timer reset");
       bluetooth_sending_status = true;
       Serial.println("Data loaded from EEPROM.");
       Serial.print("Gateway Name: ");
