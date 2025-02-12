@@ -28,7 +28,9 @@ unsigned long previousMillisForAPMode = 0;
 unsigned long previousMillisForUpdateCheck = 0;
 int led_state = 0;
 int number_of_failed_attempts_to_connect_to_server = 0;
+int number_of_failed_responses_from_server = 0;
 int max_number_of_failed_attempts = 4;
+int max_number_of_failed_responses = 3;
 int updateCheckTimer = 0;
 bool automatically_put_to_AP_mode = false;
 
@@ -212,18 +214,27 @@ void sendDataToServer(void *param)
         esp_task_wdt_reset();
         Serial.println("Watch dog timer reset");
         number_of_failed_attempts_to_connect_to_server = 0;
+        number_of_failed_responses_from_server = 0;
         break;
       }
       else
       {
-        number_of_failed_attempts_to_connect_to_server++;
+        number_of_failed_responses_from_server++;
         delay(delay_after_failed_attempt_to_send_data);
-        if (number_of_failed_attempts_to_connect_to_server >= max_number_of_failed_attempts)
+        if (number_of_failed_responses_from_server >= max_number_of_failed_responses)
         {
-          number_of_failed_attempts_to_connect_to_server = 0;
+          number_of_failed_responses_from_server = 0;
+          number_of_failed_attempts_to_connect_to_server++;
           Serial.println("Tried to send data " + String(max_number_of_failed_attempts) + " times. Ignoring packet");
           blinkRGBLedInPattern(1, LED_brightness, 0, 0, 30, 30, 60, 0);
           break;
+          if (number_of_failed_attempts_to_connect_to_server >= max_number_of_failed_attempts)
+          {
+            number_of_failed_attempts_to_connect_to_server = 0;
+            Serial.println("Restarting ESP");
+            blinkRGBLedInPattern(max_number_of_failed_attempts, LED_brightness, 0, 0, 400, 200); // blink red LED long pulses for max_number_of_failed_attempts
+            ESP.restart();
+          }
         }
       }
     }
@@ -291,7 +302,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         {
           if (strcmp(macAddress.c_str(), selected_sensor_mac_address.c_str()) == 0)
           {
-            float measurement = (hex_to_int(measurementHex)) * sound_speed / 2000;
+            float measurement = (hex_to_int(measurementHex))*sound_speed / 2000;
 
             int battery = hex_to_int(batteryHex);
 
