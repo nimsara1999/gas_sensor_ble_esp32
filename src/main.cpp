@@ -892,12 +892,16 @@ void check_for_fw_updates(int interval)
       if (payload == current_fw_version)
       {
         Serial.println("Firmware update check done. No new updates available");
+        esp_task_wdt_reset();
+        Serial.println("Watch dog timer reset");
         blinkRGBLedInPattern(1, LED_brightness, LED_brightness, 0, 400, 5); // yellow LED single long pulse
         blinkRGBLedInPattern(1, 0, LED_brightness, 0, 70, 100);             // green LED single long pulse
       }
       else
       {
         Serial.println("Firmware update check done. New updates available. Initiating firmware update in 5 seconds...");
+        esp_task_wdt_reset();
+        Serial.println("Watch dog timer reset");
         blinkRGBLedInPattern(5, LED_brightness, LED_brightness, 0, 800, 200); // 5 yellow LED long pulses
         doUpdate(payload, current_fw_version);
       }
