@@ -1086,7 +1086,7 @@ void loop()
   {
     check_for_fw_updates(fw_update_interval);
     handleButtonPress();
-    esp_task_wdt_reset();
+    // esp_task_wdt_reset();
     BLEScanResults foundDevices = pBLEScan->start(scanTimeSeconds, false);
     pBLEScan->clearResults();
   }
