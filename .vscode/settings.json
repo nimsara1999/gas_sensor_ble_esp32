@@ -1,5 +1,20 @@
 {
   "files.associations": {
     "string_view": "cpp"
-  }
+  },
+  "cSpell.words": [
+    "adafruit",
+    "bblanchon",
+    "devkitc",
+    "devkitm",
+    "EEPROM",
+    "elysiumapi",
+    "espressif",
+    "IMEI",
+    "industryx",
+    "Nimsara",
+    "RSSI",
+    "Sasindu",
+    "TANKSIZE"
+  ]
 }
