@@ -1,4 +1,4 @@
-// Firmware version: s3-1.0.2
+// Firmware version: s3-1.0.5
 
 #include <WiFi.h>
 #include <WebServer.h>

@@ -15,6 +15,13 @@
 
 - Use default API key if the current API key is invalid
 
+## V S3-1.0.5
+
+- Try sending a single data packet to the server for 3 times, and if success packet is not received, ignore packet.
+- After 4 consecutive ignored packets, restart the ESP.
+- Removed watchdog timer reset in the main loop. So, if no data packets are received via Bluetooth within 2 minutes, gateway will be restarted automatically.
+- In transmission mode (not in AP mode), the only place to reset watchdog is when a data packet is sent successfully.
+
 ## LED Blinking Patterns
 
 ### Color Codes
