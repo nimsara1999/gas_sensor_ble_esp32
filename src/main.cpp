@@ -954,11 +954,13 @@ bool isValidString(String data, size_t maxLength)
   if (data.isEmpty())
   {
     Serial.println("Invalid string loaded : String is empty");
+    Serial.println("Data: " + data);
     return false;
   }
   if (data.length() == 0 || data.length() > maxLength)
   {
     Serial.println("Invalid string loaded : String length is invalid");
+    Serial.println("Data: " + data);
     return false;
   }
   for (size_t i = 0; i < data.length(); i++)
@@ -967,6 +969,7 @@ bool isValidString(String data, size_t maxLength)
     if (c < 32 || c > 126)
     {
       Serial.println("Invalid string loaded : Invalid character found");
+      Serial.println("Data: " + data);
       return false; // Invalid character found
     }
   }
@@ -986,6 +989,7 @@ void setup()
   pinMode(BOOT_PIN, INPUT_PULLUP);
 
   Serial.println("\n\nStarting Gateway...\n");
+  Serial.println("**Temporary Version***");
   indicateGatewayStart(); // blink white, cyan, magenta, yellow, white short pulses
 
   // Get the MAC address
