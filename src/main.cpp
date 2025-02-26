@@ -949,18 +949,20 @@ void doUpdate(const String &new_fw_version, const String &old_fw_version)
   }
 }
 
-bool isValidString(String data, size_t maxLength)
+bool isValidString(String data, size_t maxLength, String data_name)
 {
   if (data.isEmpty())
   {
     Serial.println("Invalid string loaded : String is empty");
     Serial.println("Data: " + data);
+    Serial.println("Data Name: " + data_name);
     return false;
   }
   if (data.length() == 0 || data.length() > maxLength)
   {
     Serial.println("Invalid string loaded : String length is invalid");
     Serial.println("Data: " + data);
+    Serial.println("Data Name: " + data_name);
     return false;
   }
   for (size_t i = 0; i < data.length(); i++)
@@ -970,6 +972,7 @@ bool isValidString(String data, size_t maxLength)
     {
       Serial.println("Invalid string loaded : Invalid character found");
       Serial.println("Data: " + data);
+      Serial.println("Data Name: " + data_name);
       return false; // Invalid character found
     }
   }
@@ -1040,9 +1043,9 @@ void setup()
     inAPMode = false;
     WiFi.mode(WIFI_STA);
     indicateSuccessfulConnection();
-    if (isValidString(timeZone, 50) && isValidString(tankSize, 50) && isValidString(longitude, 50) && isValidString(latitude, 50) && isValidString(loadedHeight, 50) && isValidString(gatewayName, 50))
+    if (isValidString(timeZone, 50, "timezone") && isValidString(tankSize, 50, "tankSize") && isValidString(longitude, 50, "longitude") && isValidString(latitude, 50, "latitude") && isValidString(loadedHeight, 50, "loadedHeight") && isValidString(gatewayName, 50, "gatewayName"))
     {
-      if (!isValidString(apiKey, 50))
+      if (!isValidString(apiKey, 50, "apiKey"))
       {
         apiKey = "S+6nCxThMZvzQYDy3z2NMWSaF6wvPjSvCtPOkPMrKII=";
         Serial.println("Invalid API key loaded. Using default API key");
