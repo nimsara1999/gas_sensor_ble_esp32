@@ -22,6 +22,12 @@
 - Removed watchdog timer reset in the main loop. So, if no data packets are received via Bluetooth within 2 minutes, gateway will be restarted automatically.
 - In transmission mode (not in AP mode), the only places to reset watchdog are when a data packet is sent successfully, or a successful FW update check.
 
+## V S3-1.0.6
+
+- Reset to a default gateway name ("DEFAULT" + gateway_ssid_with_mac) if the gateway name is invalid
+- Print the invalid data if a data loaded from the EEPROM is invalid
+- Send Wi-Fi signal RSSI with the data packet.
+
 ## LED Blinking Patterns
 
 ### Color Codes

@@ -327,6 +327,7 @@ class AdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
                        "\"LATITUDE\":\"" + String(latitude) + "\"," +
                        "\"LOADED_HEIGHT\":" + String(loadedHeight.toFloat()) + "," +
                        "\"GW_NAME\":\"" + String(gatewayName) + "\"," +
+                       "\"WIFI_RSSI\":\"" + String(WiFi.RSSI()) + "\"," +
                        "\"RSSI\":" + String(advertisedDevice.getRSSI()) + "}";
 
             if (millis() - lastSendTime > 5000)
@@ -954,15 +955,15 @@ bool isValidString(String data, size_t maxLength, String data_name)
   if (data.isEmpty())
   {
     Serial.println("Invalid string loaded : String is empty");
+    Serial.println("Invalid data type: " + data_name);
     Serial.println("Data: " + data);
-    Serial.println("Data Name: " + data_name);
     return false;
   }
   if (data.length() == 0 || data.length() > maxLength)
   {
     Serial.println("Invalid string loaded : String length is invalid");
+    Serial.println("Invalid data type: " + data_name);
     Serial.println("Data: " + data);
-    Serial.println("Data Name: " + data_name);
     return false;
   }
   for (size_t i = 0; i < data.length(); i++)
@@ -971,8 +972,8 @@ bool isValidString(String data, size_t maxLength, String data_name)
     if (c < 32 || c > 126)
     {
       Serial.println("Invalid string loaded : Invalid character found");
+      Serial.println("Invalid data type: " + data_name);
       Serial.println("Data: " + data);
-      Serial.println("Data Name: " + data_name);
       return false; // Invalid character found
     }
   }
@@ -992,7 +993,7 @@ void setup()
   pinMode(BOOT_PIN, INPUT_PULLUP);
 
   Serial.println("\n\nStarting Gateway...\n");
-  Serial.println("**Temporary Version***");
+  Serial.println("***V S3-1.0.6***");
   indicateGatewayStart(); // blink white, cyan, magenta, yellow, white short pulses
 
   // Get the MAC address
@@ -1043,8 +1044,16 @@ void setup()
     inAPMode = false;
     WiFi.mode(WIFI_STA);
     indicateSuccessfulConnection();
-    if (isValidString(timeZone, 50, "timezone") && isValidString(tankSize, 50, "tankSize") && isValidString(longitude, 50, "longitude") && isValidString(latitude, 50, "latitude") && isValidString(loadedHeight, 50, "loadedHeight") && isValidString(gatewayName, 50, "gatewayName"))
+    Serial.println("WiFi RSSI: " + String(WiFi.RSSI()) + " dBm");
+    if (isValidString(timeZone, 50, "timezone") && isValidString(tankSize, 50, "tankSize") && isValidString(longitude, 50, "longitude") && isValidString(latitude, 50, "latitude") && isValidString(loadedHeight, 50, "loadedHeight"))
     {
+      if (!isValidString(gatewayName, 50, "gatewayName"))
+      {
+        Serial.println("Invalid Gateway name loaded. Old gateway name: " + String(gatewayName));
+        gatewayName = "DEFAULT: " + ap_ssid;
+        Serial.println("Loaded default gateway name: " + gatewayName);
+      }
+
       if (!isValidString(apiKey, 50, "apiKey"))
       {
         apiKey = "S+6nCxThMZvzQYDy3z2NMWSaF6wvPjSvCtPOkPMrKII=";
@@ -1064,7 +1073,7 @@ void setup()
     }
     else
     {
-      Serial.println("Invalid data loaded from EEPROM. Restarting the gateway");
+      Serial.println("Invalid data loaded from EEPROM. Waiting for user to reconfigure the gateway");
       while (1)
       {
         delay(100);
